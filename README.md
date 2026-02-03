@@ -10,62 +10,6 @@
 
 CLAWP Agent is an AI-powered autonomous token launcher on pump.fun, powered by OpenClaw. Users describe token ideas via chat, and the platform autonomously executes creation, deployment, and post-launch buyback & burn operations.
 
-## Production Build Plan
-
-### Phase 1: Database & Infrastructure (DONE)
-- [x] Setup PostgreSQL database
-- [x] Create database tables (tokens, sessions, burns)
-- [x] Setup environment variables (Helius RPC, encryption key)
-- [x] Install Solana dependencies (@solana/web3.js)
-
-### Phase 2: Token Creation (DONE)
-- [x] Session wallet generator (Keypair per token)
-- [x] Deposit monitoring (watch for incoming SOL)
-- [x] IPFS upload integration (pump.fun/api/ipfs)
-- [x] PumpPortal integration (/api/trade-local)
-- [x] Transaction signing & sending via Helius
-- [x] Frontend integration with real API
-- [x] Wallet persistence to database (survives restarts)
-
-### Phase 3: Real-time Data (DONE)
-- [x] PumpPortal WebSocket connection
-- [x] Landing page: 5 recent launches (real data)
-- [x] Landing page: 5 recent graduated (real data)
-- [x] Active Launches: real-time bonding curve updates
-- [x] Migration detection for graduated tokens
-- [x] Buyback & Burn: real stats and transactions
-- [x] Auto-refresh every 30s for tokens, 60s for burns
-
-### Phase 4: Buyback & Burn (DONE)
-- [x] Fee monitoring (check wallet balances every 5 minutes)
-- [x] Auto buyback execution via PumpPortal when balance > 0.05 SOL
-- [x] 60% of collected fees used per buyback cycle (40% accumulates for next cycle)
-- [x] SPL token burn after buyback
-- [x] Transaction history recording to burns table
-
-### Phase 5: Polish (DONE)
-- [x] Error handling & retry logic (buyback with exponential backoff)
-- [x] Loading states & UX feedback (button loading, toast notifications)
-- [x] Mobile responsiveness (hamburger menu, responsive grids)
-- [x] Security improvements (UUID validation, input sanitization, security headers)
-
-### Phase 6: Vanity Address Pool (DONE)
-- [x] Pre-generate addresses ending with "CLAW" (uppercase exact match)
-- [x] vanity_addresses table to store pre-generated addresses
-- [x] Background pool manager to continuously replenish pool
-- [x] Deploy endpoint uses pre-generated addresses instead of on-the-fly
-- [x] Address reservation with atomic locking to prevent double-use
-- [x] Auto-release addresses back to pool if deployment fails
-- [x] API endpoints for pool status monitoring
-
-### Phase 7: Lightweight Production Build (DONE)
-- [x] Removed OpenClaw gateway (dist/ folder) - was causing deployment timeouts
-- [x] Direct Claude API integration via Replit AI Integrations
-- [x] Chat handled by /api/chat REST endpoint (no WebSocket needed)
-- [x] Removed 52 unused skill folders (kept only clawp)
-- [x] Removed test/, packages/, vendor/ folders
-- [x] Project size reduced from 3.4GB to ~100MB (excluding node_modules)
-- [x] Frontend updated to use REST API instead of WebSocket
 
 ## Architecture
 
