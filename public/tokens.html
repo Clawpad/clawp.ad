@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tokens - ClawPad</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-tertiary: #1a1a24;
+            --text-primary: #ffffff;
+            --text-secondary: #8888aa;
+            --primary: #ff4444;
+            --success: #00ff88;
+            --warning: #ffaa00;
+            --info: #4488ff;
+            --border-color: rgba(255, 255, 255, 0.08);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg-primary); color: var(--text-primary); line-height: 1.7; }
+        .container { max-width: 1000px; margin: 0 auto; padding: 0 24px; }
+        
+        header { padding: 20px 0; border-bottom: 1px solid var(--border-color); }
+        .header-content { display: flex; justify-content: space-between; align-items: center; }
+        .logo { display: flex; align-items: center; gap: 12px; text-decoration: none; }
+        .logo-icon { width: 40px; height: 40px; border-radius: 10px; overflow: hidden; }
+        .logo-icon img { width: 100%; height: 100%; object-fit: cover; }
+        .logo-text { font-family: 'Space Grotesk', sans-serif; font-size: 1.4rem; font-weight: 700; color: var(--primary); }
+        .nav-links { display: flex; gap: 32px; align-items: center; }
+        .nav-links a { color: var(--text-secondary); text-decoration: none; font-size: 0.95rem; }
+        .nav-links a:hover, .nav-links a.active { color: var(--primary); }
+        .btn-launch { background: linear-gradient(135deg, var(--primary), #ff6b6b); color: white; padding: 10px 20px; border-radius: 10px; text-decoration: none; font-weight: 600; }
+
+        .hero { padding: 80px 0 60px; text-align: center; }
+        .hero h1 { font-family: 'Space Grotesk', sans-serif; font-size: 3rem; margin-bottom: 16px; background: linear-gradient(135deg, #fff, var(--primary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .hero p { font-size: 1.2rem; color: var(--text-secondary); max-width: 600px; margin: 0 auto; }
+
+        .section { padding: 60px 0; border-top: 1px solid var(--border-color); }
+        .section h2 { font-family: 'Space Grotesk', sans-serif; font-size: 2rem; margin-bottom: 24px; }
+        .section h3 { font-size: 1.3rem; margin: 32px 0 16px; color: var(--text-primary); }
+        .section p { color: var(--text-secondary); margin-bottom: 16px; }
+        .section ul, .section ol { color: var(--text-secondary); padding-left: 24px; margin-bottom: 16px; }
+        .section li { margin-bottom: 8px; }
+        .section strong { color: var(--text-primary); }
+
+        .diagram-box { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 16px; padding: 32px; margin: 32px 0; }
+        .diagram-box pre { font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; color: var(--text-primary); white-space: pre; overflow-x: auto; }
+
+        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin: 32px 0; }
+        .stat-card { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; padding: 24px; text-align: center; }
+        .stat-value { font-family: 'Space Grotesk', sans-serif; font-size: 2rem; font-weight: 700; color: var(--primary); }
+        .stat-label { font-size: 0.9rem; color: var(--text-secondary); margin-top: 4px; }
+
+        table { width: 100%; border-collapse: collapse; margin: 24px 0; }
+        th, td { padding: 14px 16px; text-align: left; border-bottom: 1px solid var(--border-color); }
+        th { background: var(--bg-tertiary); font-weight: 600; color: var(--text-primary); }
+        td { color: var(--text-secondary); }
+
+        .callout { padding: 20px 24px; border-radius: 12px; margin: 24px 0; display: flex; gap: 16px; background: rgba(68, 136, 255, 0.1); border: 1px solid rgba(68, 136, 255, 0.3); }
+        .callout-icon { flex-shrink: 0; width: 24px; height: 24px; color: var(--info); }
+        .callout-content { flex: 1; }
+        .callout-title { font-weight: 600; margin-bottom: 4px; }
+
+        .lifecycle-flow { display: flex; align-items: center; justify-content: center; gap: 16px; flex-wrap: wrap; margin: 32px 0; }
+        .lifecycle-step { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; padding: 20px 24px; text-align: center; min-width: 140px; }
+        .lifecycle-step h4 { font-size: 0.9rem; margin-bottom: 4px; }
+        .lifecycle-step p { font-size: 0.8rem; color: var(--text-secondary); margin: 0; }
+        .lifecycle-arrow { color: var(--primary); font-size: 1.5rem; }
+
+        .token-types { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; margin: 32px 0; }
+        .token-type-card { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 16px; padding: 28px; }
+        .token-type-card h4 { font-size: 1.1rem; margin-bottom: 12px; display: flex; align-items: center; gap: 10px; }
+        .token-type-card .icon { width: 32px; height: 32px; background: rgba(255, 68, 68, 0.2); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--primary); }
+        .token-type-card p { color: var(--text-secondary); font-size: 0.95rem; margin: 0; }
+
+        footer { padding: 40px 0; border-top: 1px solid var(--border-color); text-align: center; }
+        .footer-links { display: flex; justify-content: center; gap: 32px; margin-bottom: 16px; }
+        .footer-links a { color: var(--text-secondary); text-decoration: none; }
+        .footer-links a:hover { color: var(--primary); }
+        .footer-copy { color: var(--text-secondary); font-size: 0.85rem; }
+
+        @media (max-width: 768px) {
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+            .token-types { grid-template-columns: 1fr; }
+            .lifecycle-flow { flex-direction: column; }
+            .lifecycle-arrow { transform: rotate(90deg); }
+            .nav-links { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container header-content">
+            <a href="/" class="logo">
+                <div class="logo-icon"><img src="/logo.png" alt="ClawPad"></div>
+                <span class="logo-text">ClawPad</span>
+            </a>
+            <nav class="nav-links">
+                <a href="/tokens" class="active">Tokens</a>
+                <a href="/features">Features</a>
+                <a href="/openclaw">OpenClaw</a>
+                <a href="/app" class="btn-launch">Launch App</a>
+            </nav>
+        </div>
+    </header>
+
+    <div class="container">
+        <section class="hero">
+            <h1>Token Ecosystem</h1>
+            <p>Understanding how tokens work on ClawPad - from creation on pump.fun to graduation on Raydium.</p>
+        </section>
+
+        <section class="section">
+            <h2>Platform Statistics</h2>
+            <p>Real-time metrics from the ClawPad ecosystem showing the health and activity of our token launches.</p>
+            
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value">247</div>
+                    <div class="stat-label">Tokens Launched</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">89</div>
+                    <div class="stat-label">Graduated</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">$2.4M</div>
+                    <div class="stat-label">Total Volume</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">$156K</div>
+                    <div class="stat-label">Tokens Burned</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="section">
+            <h2>Token Lifecycle</h2>
+            <p>Every token launched through ClawPad follows a predictable lifecycle from creation to potential graduation.</p>
+
+            <div class="lifecycle-flow">
+                <div class="lifecycle-step">
+                    <h4>1. Creation</h4>
+                    <p>AI generates blueprint</p>
+                </div>
+                <div class="lifecycle-arrow">→</div>
+                <div class="lifecycle-step">
+                    <h4>2. Launch</h4>
+                    <p>Deploy to pump.fun</p>
+                </div>
+                <div class="lifecycle-arrow">→</div>
+                <div class="lifecycle-step">
+                    <h4>3. Bonding</h4>
+                    <p>Trade on curve</p>
+                </div>
+                <div class="lifecycle-arrow">→</div>
+                <div class="lifecycle-step">
+                    <h4>4. Graduate</h4>
+                    <p>Migrate to Raydium</p>
+                </div>
+            </div>
+
+            <div class="diagram-box">
+                <pre>
+   CREATION                    BONDING CURVE                      GRADUATION
+  ┌─────────┐                 ┌─────────────┐                   ┌───────────┐
+  │  User   │                 │             │                   │           │
+  │  Idea   │───▶ Blueprint ──│  pump.fun   │──▶ $69K Cap ──▶  │  Raydium  │
+  │         │                 │   Trading   │                   │    AMM    │
+  └─────────┘                 └─────────────┘                   └───────────┘
+       │                            │                                 │
+       ▼                            ▼                                 ▼
+  AI generates              Price increases                    Standard DEX
+  name, symbol,             with each buy                      trading begins
+  narrative, art            from the curve
+                </pre>
+            </div>
+        </section>
+
+        <section class="section">
+            <h2>Token States</h2>
+            <p>Tokens exist in different states throughout their lifecycle, each with distinct characteristics.</p>
+
+            <div class="token-types">
+                <div class="token-type-card">
+                    <h4><span class="icon">🔥</span> Active (Bonding)</h4>
+                    <p>Tokens currently trading on pump.fun's bonding curve. Price is determined algorithmically based on supply. Anyone can buy or sell at any time with guaranteed liquidity.</p>
+                </div>
+                <div class="token-type-card">
+                    <h4><span class="icon">🎓</span> Graduated</h4>
+                    <p>Tokens that reached the graduation threshold (~$69K market cap). Liquidity has been migrated to Raydium where trading continues via traditional AMM mechanics.</p>
+                </div>
+                <div class="token-type-card">
+                    <h4><span class="icon">📈</span> Trending</h4>
+                    <p>Tokens with high trading volume or rapid price appreciation. These often indicate strong community interest and momentum.</p>
+                </div>
+                <div class="token-type-card">
+                    <h4><span class="icon">🔄</span> Buyback Active</h4>
+                    <p>Tokens where creators are actively using creator fees to buyback and burn, reducing circulating supply and increasing scarcity.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="section">
+            <h2>Bonding Curve Mechanics</h2>
+            <p>The bonding curve is a mathematical function that determines token price based on circulating supply.</p>
+
+            <h3>Price Formula</h3>
+            <div class="diagram-box">
+                <pre>
+  Price = f(Supply)
+
+  Where the curve follows:
+  
+  P(s) = k × s²
+  
+  k = constant determined at launch
+  s = current circulating supply
+  
+  As more tokens are bought:
+  - Supply (s) increases
+  - Price P(s) increases quadratically
+  - Each subsequent token costs more
+                </pre>
+            </div>
+
+            <h3>Key Properties</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Property</th>
+                        <th>Description</th>
+                        <th>Benefit</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Deterministic Pricing</strong></td>
+                        <td>Price is calculated mathematically, not by order book</td>
+                        <td>No price manipulation, transparent pricing</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Instant Liquidity</strong></td>
+                        <td>Always able to buy or sell against the curve</td>
+                        <td>No waiting for counterparty, no slippage on small orders</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Fair Launch</strong></td>
+                        <td>No presale, everyone buys from same curve</td>
+                        <td>Equal opportunity, no insider advantage</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Price Discovery</strong></td>
+                        <td>Market determines value through buying/selling</td>
+                        <td>Organic price based on actual demand</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section class="section">
+            <h2>Graduation Process</h2>
+            <p>When a token reaches the graduation threshold, it migrates from pump.fun to Raydium.</p>
+
+            <h3>Graduation Threshold</h3>
+            <div class="callout">
+                <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+                <div class="callout-content">
+                    <div class="callout-title">~$69,000 Market Cap</div>
+                    <p>When a token's market capitalization reaches approximately $69,000, it automatically triggers the graduation process and migrates to Raydium DEX.</p>
+                </div>
+            </div>
+
+            <h3>What Happens During Graduation</h3>
+            <ol>
+                <li><strong>Bonding Curve Closes:</strong> No more buying/selling on pump.fun</li>
+                <li><strong>Liquidity Calculation:</strong> Total SOL in curve is calculated</li>
+                <li><strong>Pool Creation:</strong> Raydium AMM pool is created</li>
+                <li><strong>Liquidity Migration:</strong> SOL and tokens are added to the pool</li>
+                <li><strong>Trading Resumes:</strong> Token is now tradeable on Raydium</li>
+            </ol>
+
+            <h3>Post-Graduation Trading</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Aspect</th>
+                        <th>Bonding Curve (pump.fun)</th>
+                        <th>AMM (Raydium)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Price Mechanism</td>
+                        <td>Mathematical curve</td>
+                        <td>x*y=k constant product</td>
+                    </tr>
+                    <tr>
+                        <td>Liquidity</td>
+                        <td>Guaranteed by curve</td>
+                        <td>Depends on pool size</td>
+                    </tr>
+                    <tr>
+                        <td>Slippage</td>
+                        <td>Minimal on small trades</td>
+                        <td>Varies with trade size</td>
+                    </tr>
+                    <tr>
+                        <td>Trading Pairs</td>
+                        <td>SOL only</td>
+                        <td>Can add more pairs</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section class="section">
+            <h2>Token Economics</h2>
+            <p>Understanding the economic model behind ClawPad tokens.</p>
+
+            <h3>Fee Structure</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Fee Type</th>
+                        <th>Rate</th>
+                        <th>Recipient</th>
+                        <th>Purpose</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Creator Fee</td>
+                        <td>1%</td>
+                        <td>Token Creator</td>
+                        <td>Rewards creators, funds buybacks</td>
+                    </tr>
+                    <tr>
+                        <td>Platform Fee</td>
+                        <td>1%</td>
+                        <td>pump.fun</td>
+                        <td>Platform maintenance</td>
+                    </tr>
+                    <tr>
+                        <td>Launch Fee</td>
+                        <td>0.025 SOL</td>
+                        <td>pump.fun</td>
+                        <td>One-time deployment cost</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>Deflationary Mechanisms</h3>
+            <p>ClawPad tokens can become deflationary through buyback and burn programs:</p>
+            <ul>
+                <li><strong>Creator-Funded Burns:</strong> Creators use their 1% fee to buy back and burn tokens</li>
+                <li><strong>Community Burns:</strong> Community members can voluntarily burn tokens</li>
+                <li><strong>Scheduled Burns:</strong> Some tokens implement scheduled burn events</li>
+            </ul>
+        </section>
+    </div>
+
+    <footer>
+        <div class="container">
+            <div class="footer-links">
+                <a href="/">Home</a>
+                <a href="/app">Launch App</a>
+                <a href="/docs">Documentation</a>
+                <a href="/features">Features</a>
+                <a href="/openclaw">OpenClaw</a>
+            </div>
+            <p class="footer-copy">ClawPad - Powered by OpenClaw</p>
+        </div>
+    </footer>
+</body>
+</html>
