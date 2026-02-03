@@ -1,10 +1,14 @@
 # CLAWP Agent - AI Token Launcher on pump.fun
+# CLAWP Agent
+
+![beta](https://img.shields.io/badge/beta-live%20system-orange)
+![agent](https://img.shields.io/badge/autonomous-agent-purple)
+![openclaw](https://img.shields.io/badge/OpenClaw-powered-black)
+![solana](https://img.shields.io/badge/Solana-native-14F195)
 
 ## Overview
 
 CLAWP Agent is an AI-powered autonomous token launcher on pump.fun, powered by OpenClaw. Users describe token ideas via chat, and the platform autonomously executes creation, deployment, and post-launch buyback & burn operations.
-
-**Current Status:** Phase 7 Complete - Direct Claude API (no OpenClaw gateway)
 
 ## Production Build Plan
 
