@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Features - ClawPad</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-tertiary: #1a1a24;
+            --text-primary: #ffffff;
+            --text-secondary: #8888aa;
+            --primary: #ff4444;
+            --success: #00ff88;
+            --warning: #ffaa00;
+            --info: #4488ff;
+            --border-color: rgba(255, 255, 255, 0.08);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg-primary); color: var(--text-primary); line-height: 1.7; }
+        .container { max-width: 1000px; margin: 0 auto; padding: 0 24px; }
+        
+        header { padding: 20px 0; border-bottom: 1px solid var(--border-color); }
+        .header-content { display: flex; justify-content: space-between; align-items: center; }
+        .logo { display: flex; align-items: center; gap: 12px; text-decoration: none; }
+        .logo-icon { width: 40px; height: 40px; border-radius: 10px; overflow: hidden; }
+        .logo-icon img { width: 100%; height: 100%; object-fit: cover; }
+        .logo-text { font-family: 'Space Grotesk', sans-serif; font-size: 1.4rem; font-weight: 700; color: var(--primary); }
+        .nav-links { display: flex; gap: 32px; align-items: center; }
+        .nav-links a { color: var(--text-secondary); text-decoration: none; font-size: 0.95rem; }
+        .nav-links a:hover, .nav-links a.active { color: var(--primary); }
+        .btn-launch { background: linear-gradient(135deg, var(--primary), #ff6b6b); color: white; padding: 10px 20px; border-radius: 10px; text-decoration: none; font-weight: 600; }
+
+        .hero { padding: 80px 0 60px; text-align: center; }
+        .hero h1 { font-family: 'Space Grotesk', sans-serif; font-size: 3rem; margin-bottom: 16px; background: linear-gradient(135deg, #fff, var(--primary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .hero p { font-size: 1.2rem; color: var(--text-secondary); max-width: 600px; margin: 0 auto; }
+
+        .section { padding: 60px 0; border-top: 1px solid var(--border-color); }
+        .section h2 { font-family: 'Space Grotesk', sans-serif; font-size: 2rem; margin-bottom: 24px; }
+        .section h3 { font-size: 1.3rem; margin: 32px 0 16px; color: var(--text-primary); }
+        .section p { color: var(--text-secondary); margin-bottom: 16px; }
+        .section ul, .section ol { color: var(--text-secondary); padding-left: 24px; margin-bottom: 16px; }
+        .section li { margin-bottom: 8px; }
+        .section strong { color: var(--text-primary); }
+
+        .diagram-box { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 16px; padding: 32px; margin: 32px 0; }
+        .diagram-box pre { font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; color: var(--text-primary); white-space: pre; overflow-x: auto; }
+
+        .feature-detail { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 20px; padding: 40px; margin: 40px 0; }
+        .feature-header { display: flex; align-items: center; gap: 20px; margin-bottom: 24px; }
+        .feature-icon { width: 64px; height: 64px; background: linear-gradient(135deg, rgba(255, 68, 68, 0.2), rgba(255, 68, 68, 0.05)); border-radius: 16px; display: flex; align-items: center; justify-content: center; }
+        .feature-icon svg { width: 32px; height: 32px; color: var(--primary); }
+        .feature-title { font-family: 'Space Grotesk', sans-serif; font-size: 1.5rem; }
+
+        table { width: 100%; border-collapse: collapse; margin: 24px 0; }
+        th, td { padding: 14px 16px; text-align: left; border-bottom: 1px solid var(--border-color); }
+        th { background: var(--bg-tertiary); font-weight: 600; color: var(--text-primary); }
+        td { color: var(--text-secondary); }
+
+        .callout { padding: 20px 24px; border-radius: 12px; margin: 24px 0; display: flex; gap: 16px; }
+        .callout.info { background: rgba(68, 136, 255, 0.1); border: 1px solid rgba(68, 136, 255, 0.3); }
+        .callout.success { background: rgba(0, 255, 136, 0.1); border: 1px solid rgba(0, 255, 136, 0.3); }
+        .callout.warning { background: rgba(255, 170, 0, 0.1); border: 1px solid rgba(255, 170, 0, 0.3); }
+        .callout-icon { flex-shrink: 0; width: 24px; height: 24px; }
+        .callout.info .callout-icon { color: var(--info); }
+        .callout.success .callout-icon { color: var(--success); }
+        .callout.warning .callout-icon { color: var(--warning); }
+        .callout-content { flex: 1; }
+        .callout-title { font-weight: 600; margin-bottom: 4px; }
+
+        .flow-steps { display: flex; flex-direction: column; gap: 0; margin: 32px 0; }
+        .flow-step { display: flex; gap: 20px; }
+        .flow-step-indicator { display: flex; flex-direction: column; align-items: center; }
+        .flow-step-number { width: 40px; height: 40px; background: var(--primary); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1.1rem; }
+        .flow-step-line { width: 2px; flex: 1; background: var(--border-color); min-height: 40px; }
+        .flow-step:last-child .flow-step-line { display: none; }
+        .flow-step-content { flex: 1; padding-bottom: 32px; }
+        .flow-step-title { font-weight: 600; margin-bottom: 8px; font-size: 1.1rem; }
+        .flow-step-desc { color: var(--text-secondary); }
+
+        .compare-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; margin: 32px 0; }
+        .compare-card { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 16px; padding: 28px; }
+        .compare-card h4 { font-size: 1.1rem; margin-bottom: 16px; display: flex; align-items: center; gap: 10px; }
+        .compare-card .badge { padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; }
+        .compare-card .badge.old { background: rgba(255, 68, 68, 0.2); color: var(--primary); }
+        .compare-card .badge.new { background: rgba(0, 255, 136, 0.2); color: var(--success); }
+        .compare-card ul { color: var(--text-secondary); padding-left: 20px; margin: 0; }
+        .compare-card li { margin-bottom: 8px; }
+
+        footer { padding: 40px 0; border-top: 1px solid var(--border-color); text-align: center; }
+        .footer-links { display: flex; justify-content: center; gap: 32px; margin-bottom: 16px; }
+        .footer-links a { color: var(--text-secondary); text-decoration: none; display: flex; align-items: center; gap: 6px; }
+        .footer-links a:hover { color: var(--primary); }
+        .footer-copy { color: var(--text-secondary); font-size: 0.85rem; }
+
+        @media (max-width: 768px) {
+            .compare-grid { grid-template-columns: 1fr; }
+            .nav-links { display: none; }
+            .feature-header { flex-direction: column; text-align: center; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container header-content">
+            <a href="/" class="logo">
+                <div class="logo-icon"><img src="/logo.png" alt="ClawPad"></div>
+                <span class="logo-text">ClawPad</span>
+            </a>
+            <nav class="nav-links">
+                <a href="/tokens">Tokens</a>
+                <a href="/features" class="active">Features</a>
+                <a href="/openclaw">OpenClaw</a>
+                <a href="/app" class="btn-launch">Launch App</a>
+            </nav>
+        </div>
+    </header>
+
+    <div class="container">
+        <section class="hero">
+            <h1>Platform Features</h1>
+            <p>Everything you need to launch successful tokens with AI-powered assistance and automated mechanics.</p>
+        </section>
+
+        <section class="section">
+            <div class="feature-detail">
+                <div class="feature-header">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    </div>
+                    <h2 class="feature-title">Chat-Driven Token Creation</h2>
+                </div>
+                <p>Launch tokens through natural conversation with OpenClaw AI. No forms, no complexity - just describe your idea and the AI generates everything.</p>
+
+                <h3>How It Works</h3>
+                <div class="flow-steps">
+                    <div class="flow-step">
+                        <div class="flow-step-indicator">
+                            <div class="flow-step-number">1</div>
+                            <div class="flow-step-line"></div>
+                        </div>
+                        <div class="flow-step-content">
+                            <div class="flow-step-title">Describe Your Idea</div>
+                            <div class="flow-step-desc">Tell OpenClaw what kind of token you want to create. Be creative - describe the theme, vibe, target audience, or just a funny concept.</div>
+                        </div>
+                    </div>
+                    <div class="flow-step">
+                        <div class="flow-step-indicator">
+                            <div class="flow-step-number">2</div>
+                            <div class="flow-step-line"></div>
+                        </div>
+                        <div class="flow-step-content">
+                            <div class="flow-step-title">AI Generates Blueprint</div>
+                            <div class="flow-step-desc">OpenClaw creates a complete launch blueprint including token name, symbol, narrative description, and visual art direction.</div>
+                        </div>
+                    </div>
+                    <div class="flow-step">
+                        <div class="flow-step-indicator">
+                            <div class="flow-step-number">3</div>
+                            <div class="flow-step-line"></div>
+                        </div>
+                        <div class="flow-step-content">
+                            <div class="flow-step-title">Review & Confirm</div>
+                            <div class="flow-step-desc">Review the generated blueprint. Request changes if needed, or confirm to proceed with the launch.</div>
+                        </div>
+                    </div>
+                    <div class="flow-step">
+                        <div class="flow-step-indicator">
+                            <div class="flow-step-number">4</div>
+                            <div class="flow-step-line"></div>
+                        </div>
+                        <div class="flow-step-content">
+                            <div class="flow-step-title">Auto-Execute Launch</div>
+                            <div class="flow-step-desc">Once confirmed, execution triggers automatically. Your token deploys to pump.fun with all generated assets.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="diagram-box">
+                    <pre>
+  USER INPUT                    AI PROCESSING                    OUTPUT
+┌───────────────┐             ┌───────────────┐             ┌───────────────┐
+│  "I want a    │             │   OpenClaw    │             │   BLUEPRINT   │
+│   cat-themed  │────────────▶│   Analyzes    │────────────▶│               │
+│   memecoin"   │             │   & Creates   │             │  Name: $MEOW  │
+└───────────────┘             └───────────────┘             │  Symbol: MEOW │
+                                                            │  Art: Cat...  │
+                                                            └───────────────┘
+                                                                    │
+                              ┌───────────────┐                     │
+                              │  USER SAYS    │◀────────────────────┘
+                              │   "CONFIRM"   │
+                              └───────────────┘
+                                      │
+                                      ▼
+                              ┌───────────────┐
+                              │  AUTO-LAUNCH  │
+                              │   pump.fun    │
+                              └───────────────┘
+                    </pre>
+                </div>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="feature-detail">
+                <div class="feature-header">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+                    </div>
+                    <h2 class="feature-title">AI Visual Direction</h2>
+                </div>
+                <p>OpenClaw doesn't just name your token - it creates complete visual direction for your token's brand identity.</p>
+
+                <h3>What AI Generates</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Element</th>
+                            <th>Description</th>
+                            <th>Example</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Token Name</strong></td>
+                            <td>Memorable, brandable name</td>
+                            <td>MoonCat, SolarPunk, DegenApe</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Symbol</strong></td>
+                            <td>Short ticker symbol (3-5 chars)</td>
+                            <td>$MEOW, $SOLAR, $DAPE</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Narrative</strong></td>
+                            <td>Compelling story/description</td>
+                            <td>"The first cat to colonize the moon..."</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Art Direction</strong></td>
+                            <td>Visual style guide for artwork</td>
+                            <td>"Cyberpunk cat astronaut, neon colors..."</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Buyback Strategy</strong></td>
+                            <td>Recommended burn schedule</td>
+                            <td>"Weekly 25% of creator fees"</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="callout info">
+                    <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+                    <div class="callout-content">
+                        <div class="callout-title">AI-Generated Art</div>
+                        <p>The visual direction provided by OpenClaw can be used with image generation tools to create your token's artwork. The AI provides detailed prompts optimized for generating high-quality token art.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="feature-detail">
+                <div class="feature-header">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                    </div>
+                    <h2 class="feature-title">Automated Buyback & Burn</h2>
+                </div>
+                <p>Create deflationary pressure on your token through automated buyback and burn mechanics using creator fees.</p>
+
+                <h3>How Buyback & Burn Works</h3>
+                <div class="diagram-box">
+                    <pre>
+  TRADING ACTIVITY              CREATOR FEES              BUYBACK & BURN
+┌─────────────────┐          ┌─────────────────┐        ┌─────────────────┐
+│  Users Trade    │          │   1% Fee on     │        │  Creator Uses   │
+│  Your Token     │─────────▶│   Each Trade    │───────▶│  Fees to Buy    │
+│  on pump.fun    │          │   Goes to You   │        │  & Burn Tokens  │
+└─────────────────┘          └─────────────────┘        └─────────────────┘
+                                                                 │
+                                                                 ▼
+                                                        ┌─────────────────┐
+                                                        │ Supply Reduces  │
+                                                        │ Scarcity Grows  │
+                                                        │ Value Protected │
+                                                        └─────────────────┘
+                    </pre>
+                </div>
+
+                <h3>Burn Strategies</h3>
+                <div class="compare-grid">
+                    <div class="compare-card">
+                        <h4>Manual Burns</h4>
+                        <ul>
+                            <li>Creator decides when to burn</li>
+                            <li>Flexible timing based on market</li>
+                            <li>Can announce burns for hype</li>
+                            <li>Full control over strategy</li>
+                        </ul>
+                    </div>
+                    <div class="compare-card">
+                        <h4>Scheduled Burns</h4>
+                        <ul>
+                            <li>Automatic on fixed schedule</li>
+                            <li>Weekly, daily, or per-trade</li>
+                            <li>Predictable for holders</li>
+                            <li>Set-and-forget operation</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <h3>Burn Statistics</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Metric</th>
+                            <th>Platform Total</th>
+                            <th>Average Per Token</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Total Burned (USD)</td>
+                            <td>$156,420</td>
+                            <td>$1,758</td>
+                        </tr>
+                        <tr>
+                            <td>Burn Transactions</td>
+                            <td>2,847</td>
+                            <td>32</td>
+                        </tr>
+                        <tr>
+                            <td>Active Burn Programs</td>
+                            <td>89</td>
+                            <td>-</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="feature-detail">
+                <div class="feature-header">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                    </div>
+                    <h2 class="feature-title">Fixed Execution Mechanics</h2>
+                </div>
+                <p>Once you confirm a launch, execution follows deterministic rules. No surprises, no hidden mechanics - everything operates on transparent, fixed parameters.</p>
+
+                <h3>Execution Guarantees</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Parameter</th>
+                            <th>Value</th>
+                            <th>Modifiable?</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Launch Fee</td>
+                            <td>0.025 SOL</td>
+                            <td>No - Fixed by pump.fun</td>
+                        </tr>
+                        <tr>
+                            <td>Creator Fee</td>
+                            <td>1% of trades</td>
+                            <td>No - Fixed by protocol</td>
+                        </tr>
+                        <tr>
+                            <td>Graduation Threshold</td>
+                            <td>~$69K market cap</td>
+                            <td>No - Fixed by pump.fun</td>
+                        </tr>
+                        <tr>
+                            <td>Initial Supply</td>
+                            <td>1 Billion tokens</td>
+                            <td>No - Standard allocation</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="callout success">
+                    <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                    <div class="callout-content">
+                        <div class="callout-title">No AI Fund Custody</div>
+                        <p>The AI advisor never holds or controls any funds. All transactions are executed directly through your wallet. OpenClaw only provides guidance - you maintain full control of your assets.</p>
+                    </div>
+                </div>
+
+                <h3>Traditional Launch vs ClawPad</h3>
+                <div class="compare-grid">
+                    <div class="compare-card">
+                        <h4><span class="badge old">Traditional</span> Manual Launch</h4>
+                        <ul>
+                            <li>Research token economics</li>
+                            <li>Design artwork yourself</li>
+                            <li>Write marketing copy</li>
+                            <li>Navigate pump.fun UI</li>
+                            <li>Hope for the best</li>
+                        </ul>
+                    </div>
+                    <div class="compare-card">
+                        <h4><span class="badge new">ClawPad</span> AI-Assisted</h4>
+                        <ul>
+                            <li>Describe your idea</li>
+                            <li>AI generates everything</li>
+                            <li>Review and confirm</li>
+                            <li>Auto-execute launch</li>
+                            <li>Built-in best practices</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <footer>
+        <div class="container">
+            <div class="footer-links">
+                <a href="https://x.com/clawpad" target="_blank"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg> X</a>
+                <a href="https://github.com/clawpad" target="_blank"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg> GitHub</a>
+                <a href="/openclaw">OpenClaw</a>
+                <a href="/app">Launch App</a>
+            </div>
+            <p class="footer-copy">ClawPad - Powered by OpenClaw</p>
+        </div>
+    </footer>
+</body>
+</html>
