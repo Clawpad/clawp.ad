@@ -1,0 +1,2548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClawPad - Autonomous Token Launcher</title>
+    <link rel="icon" type="image/png" href="/logo.png">
+    <link rel="preload" href="/logo.png" as="image" type="image/png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-tertiary: #1a1a24;
+            --text-primary: #ffffff;
+            --text-secondary: #8888aa;
+            --primary: #ff4444;
+            --primary-glow: rgba(255, 68, 68, 0.4);
+            --success: #00ff88;
+            --warning: #ffaa00;
+            --border-color: rgba(255, 255, 255, 0.08);
+            --border-glow: rgba(255, 255, 255, 0.15);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html {
+            scroll-behavior: smooth;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+            overflow-y: auto;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 24px;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 14px 28px;
+            border-radius: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+            border: none;
+            font-size: 1rem;
+            position: relative;
+            z-index: 100;
+            -webkit-tap-highlight-color: rgba(255, 68, 68, 0.3);
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), #ff6b6b);
+            color: white;
+            box-shadow: 0 4px 24px var(--primary-glow);
+        }
+
+        .btn-primary:hover,
+        .btn-primary:active {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 32px var(--primary-glow);
+        }
+        
+        .btn-primary:active {
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: var(--text-primary);
+            border: 1px solid var(--border-glow);
+        }
+
+        .btn-secondary:hover {
+            background: var(--bg-secondary);
+            border-color: var(--primary);
+        }
+
+        /* HERO */
+        .hero {
+            text-align: center;
+            padding: 100px 0 80px;
+            position: relative;
+        }
+
+        .hero-mascot {
+            width: 200px;
+            height: 200px;
+            margin: 0 auto 40px;
+            position: relative;
+        }
+
+        .hero-logo {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            filter: drop-shadow(0 0 30px rgba(255, 68, 68, 0.4));
+        }
+
+        /* Hero Mascot Badge - Small lobster at bottom left of logo */
+        .hero-mascot-badge {
+            position: absolute;
+            bottom: -5px;
+            left: -15px;
+            width: 55px;
+            height: 50px;
+            z-index: 10;
+        }
+
+        /* Hero Lobster Mascot (small badge version) */
+        .hero-lobster {
+            position: relative;
+            width: 55px;
+            height: 50px;
+            animation: heroLobsterBob 1.5s ease-in-out infinite;
+        }
+
+        .hero-lobster-body {
+            position: absolute;
+            width: 38px;
+            height: 28px;
+            background: linear-gradient(135deg, #ff6b5b 0%, #e74c3c 50%, #c0392b 100%);
+            border-radius: 50% 50% 40% 40%;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 4px 15px rgba(231, 76, 60, 0.5);
+        }
+
+        .hero-lobster-body::after {
+            content: '';
+            position: absolute;
+            width: 14px;
+            height: 18px;
+            background: linear-gradient(to bottom, #e74c3c, #c0392b);
+            bottom: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-radius: 0 0 50% 50%;
+            clip-path: polygon(20% 0, 80% 0, 100% 100%, 50% 80%, 0 100%);
+        }
+
+        .hero-lobster-eye {
+            position: absolute;
+            width: 8px;
+            height: 10px;
+            background: white;
+            border-radius: 50%;
+            top: 5px;
+        }
+
+        .hero-lobster-eye::after {
+            content: '';
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: #222;
+            border-radius: 50%;
+            top: 3px;
+            left: 50%;
+            transform: translateX(-50%);
+            animation: heroEyeMove 2.5s ease-in-out infinite;
+        }
+
+        .hero-lobster-eye.left { left: 8px; }
+        .hero-lobster-eye.right { right: 8px; }
+
+        .hero-lobster-claw {
+            position: absolute;
+            width: 10px;
+            height: 8px;
+            background: linear-gradient(135deg, #ff6b5b, #e74c3c);
+            border-radius: 50% 50% 30% 30%;
+            top: 12px;
+            box-shadow: 0 2px 6px rgba(231, 76, 60, 0.4);
+        }
+
+        .hero-lobster-claw::before {
+            content: '';
+            position: absolute;
+            width: 5px;
+            height: 6px;
+            background: linear-gradient(135deg, #ff6b5b, #e74c3c);
+            border-radius: 50%;
+            top: -3px;
+        }
+
+        .hero-lobster-claw.left {
+            left: -4px;
+            animation: heroClawLeft 1s ease-in-out infinite;
+        }
+        .hero-lobster-claw.left::before { right: 0; }
+
+        .hero-lobster-claw.right {
+            right: -4px;
+            animation: heroClawRight 1s ease-in-out infinite;
+        }
+        .hero-lobster-claw.right::before { left: 0; }
+
+        .hero-lobster-antenna {
+            position: absolute;
+            width: 2px;
+            height: 12px;
+            background: linear-gradient(to top, #e74c3c, #ff6b5b);
+            top: -8px;
+            border-radius: 2px;
+        }
+
+        .hero-lobster-antenna::after {
+            content: '';
+            position: absolute;
+            width: 3px;
+            height: 3px;
+            background: #ff6b5b;
+            border-radius: 50%;
+            top: 0;
+            left: -0.5px;
+        }
+
+        .hero-lobster-antenna.left {
+            left: 11px;
+            transform: rotate(-20deg);
+            animation: heroAntennaLeft 1.5s ease-in-out infinite;
+        }
+
+        .hero-lobster-antenna.right {
+            right: 11px;
+            transform: rotate(20deg);
+            animation: heroAntennaRight 1.5s ease-in-out infinite;
+        }
+
+        @keyframes heroLobsterBob {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-4px); }
+        }
+
+        @keyframes heroEyeMove {
+            0%, 100% { transform: translateX(-50%); }
+            25% { transform: translateX(-80%); }
+            75% { transform: translateX(-20%); }
+        }
+
+        @keyframes heroClawLeft {
+            0%, 100% { transform: rotate(0deg); }
+            50% { transform: rotate(-20deg); }
+        }
+
+        @keyframes heroClawRight {
+            0%, 100% { transform: rotate(0deg); }
+            50% { transform: rotate(20deg); }
+        }
+
+        @keyframes heroAntennaLeft {
+            0%, 100% { transform: rotate(-25deg); }
+            50% { transform: rotate(-40deg); }
+        }
+
+        @keyframes heroAntennaRight {
+            0%, 100% { transform: rotate(25deg); }
+            50% { transform: rotate(40deg); }
+        }
+
+        .hero-brand {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 5rem;
+            font-weight: 700;
+            margin-bottom: 16px;
+            background: linear-gradient(135deg, #fff 0%, var(--primary) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -2px;
+        }
+
+        .hero-tagline-wrapper {
+            position: relative;
+            height: 2rem;
+            margin-bottom: 32px;
+            overflow: hidden;
+        }
+
+        .hero-tagline {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: var(--primary);
+            letter-spacing: 3px;
+            position: absolute;
+            width: 100%;
+            opacity: 0;
+            animation: taglineRotate 9s infinite;
+        }
+
+        .hero-tagline-1 { animation-delay: 0s; }
+        .hero-tagline-2 { animation-delay: 3s; }
+        .hero-tagline-3 { animation-delay: 6s; }
+
+        @keyframes taglineRotate {
+            0%, 5% { opacity: 0; transform: translateY(20px); }
+            10%, 30% { opacity: 1; transform: translateY(0); }
+            35%, 100% { opacity: 0; transform: translateY(-20px); }
+        }
+
+        .hero .description {
+            font-size: 1.15rem;
+            color: var(--text-secondary);
+            max-width: 700px;
+            margin: 0 auto 48px;
+            line-height: 1.8;
+        }
+
+        .hero-cta {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 100;
+        }
+
+        /* FLOW DIAGRAM - kept for other uses */
+        .flow-diagram {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0;
+            position: relative;
+        }
+
+        .flow-node {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            position: relative;
+            z-index: 2;
+        }
+
+        .flow-circle {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            font-weight: 600;
+            position: relative;
+            transition: all 0.3s;
+        }
+
+        .flow-circle::before {
+            content: '';
+            position: absolute;
+            inset: -3px;
+            border-radius: 50%;
+            padding: 3px;
+            background: linear-gradient(135deg, var(--border-glow), transparent);
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+        }
+
+        .flow-node:nth-child(1) .flow-circle { background: var(--bg-secondary); color: var(--text-secondary); }
+        .flow-node:nth-child(3) .flow-circle { 
+            background: linear-gradient(135deg, rgba(255,68,68,0.2), rgba(255,68,68,0.05)); 
+            color: var(--primary);
+            box-shadow: 0 0 40px var(--primary-glow);
+        }
+        .flow-node:nth-child(3) .flow-circle::before {
+            background: linear-gradient(135deg, var(--primary), transparent);
+        }
+        .flow-node:nth-child(5) .flow-circle { background: var(--bg-secondary); color: var(--success); }
+
+        .flow-label {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .flow-connector {
+            width: 80px;
+            height: 2px;
+            background: linear-gradient(90deg, var(--border-color), var(--border-glow), var(--border-color));
+            position: relative;
+        }
+
+        .flow-connector::after {
+            content: '';
+            position: absolute;
+            right: 0;
+            top: -4px;
+            border: 5px solid transparent;
+            border-left: 8px solid var(--border-glow);
+        }
+
+        /* SECTIONS */
+        .section {
+            padding: 100px 0;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .section-header {
+            text-align: center;
+            margin-bottom: 60px;
+        }
+
+        .section-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            color: var(--primary);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 16px;
+        }
+
+        .section-title {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 20px;
+        }
+
+        .section-text {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            line-height: 1.7;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        /* AUTONOMOUS SECTION - CIRCULAR DIAGRAM */
+        .circular-diagram {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 60px auto;
+            position: relative;
+            width: 400px;
+            height: 400px;
+        }
+
+        .circular-center {
+            position: relative;
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, rgba(255,68,68,0.15), rgba(255,68,68,0.05));
+            border: 2px solid var(--primary);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 2;
+            box-shadow: 0 0 60px var(--primary-glow);
+            animation: centerPulse 3s ease-in-out infinite;
+        }
+
+        @keyframes centerPulse {
+            0%, 100% { box-shadow: 0 0 60px var(--primary-glow); transform: scale(1); }
+            50% { box-shadow: 0 0 80px var(--primary-glow), 0 0 120px rgba(255,68,68,0.2); transform: scale(1.02); }
+        }
+
+        .circular-center-icon {
+            margin-bottom: 8px;
+            animation: iconFloat 2s ease-in-out infinite;
+        }
+
+        @keyframes iconFloat {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-4px); }
+        }
+
+        .circular-center-icon svg {
+            width: 32px;
+            height: 32px;
+            stroke: var(--primary);
+        }
+
+        /* Mini Lobster for Circular Center */
+        .mini-lobster-center {
+            position: relative;
+            width: 50px;
+            height: 45px;
+            animation: centerLobsterBob 1.2s ease-in-out infinite;
+        }
+
+        .mini-lobster-center-body {
+            position: absolute;
+            width: 36px;
+            height: 26px;
+            background: linear-gradient(135deg, #ff6b5b 0%, #e74c3c 50%, #c0392b 100%);
+            border-radius: 50% 50% 40% 40%;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 3px 12px rgba(231, 76, 60, 0.4);
+        }
+
+        .mini-lobster-center-body::after {
+            content: '';
+            position: absolute;
+            width: 14px;
+            height: 18px;
+            background: linear-gradient(to bottom, #e74c3c, #c0392b);
+            bottom: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-radius: 0 0 50% 50%;
+            clip-path: polygon(20% 0, 80% 0, 100% 100%, 50% 80%, 0 100%);
+        }
+
+        .mini-lobster-center-eye {
+            position: absolute;
+            width: 8px;
+            height: 10px;
+            background: white;
+            border-radius: 50%;
+            top: 4px;
+        }
+
+        .mini-lobster-center-eye::after {
+            content: '';
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: #222;
+            border-radius: 50%;
+            top: 3px;
+            left: 50%;
+            transform: translateX(-50%);
+            animation: centerEyeMove 2s ease-in-out infinite;
+        }
+
+        .mini-lobster-center-eye.left { left: 7px; }
+        .mini-lobster-center-eye.right { right: 7px; }
+
+        .mini-lobster-center-claw {
+            position: absolute;
+            width: 10px;
+            height: 8px;
+            background: linear-gradient(135deg, #ff6b5b, #e74c3c);
+            border-radius: 50% 50% 30% 30%;
+            top: 12px;
+        }
+
+        .mini-lobster-center-claw.left {
+            left: -2px;
+            animation: centerClawLeft 0.8s ease-in-out infinite;
+        }
+
+        .mini-lobster-center-claw.right {
+            right: -2px;
+            animation: centerClawRight 0.8s ease-in-out infinite;
+        }
+
+        .mini-lobster-center-antenna {
+            position: absolute;
+            width: 2px;
+            height: 12px;
+            background: linear-gradient(to top, #e74c3c, #ff6b5b);
+            top: -8px;
+            border-radius: 2px;
+        }
+
+        .mini-lobster-center-antenna.left { left: 10px; transform: rotate(-20deg); }
+        .mini-lobster-center-antenna.right { right: 10px; transform: rotate(20deg); }
+
+        @keyframes centerLobsterBob {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-4px); }
+        }
+
+        @keyframes centerEyeMove {
+            0%, 100% { transform: translateX(-50%); }
+            25% { transform: translateX(-80%); }
+            75% { transform: translateX(-20%); }
+        }
+
+        @keyframes centerClawLeft {
+            0%, 100% { transform: rotate(-15deg); }
+            50% { transform: rotate(-25deg); }
+        }
+
+        @keyframes centerClawRight {
+            0%, 100% { transform: rotate(15deg); }
+            50% { transform: rotate(25deg); }
+        }
+
+        .circular-center-text {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+
+        .openclaw-badge {
+            position: absolute;
+            top: -8px;
+            right: -20px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 8px;
+            background: var(--bg-secondary);
+            border-radius: 20px;
+            border: 1px solid rgba(255,68,68,0.4);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+
+        .openclaw-badge-icon {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        .openclaw-badge span {
+            font-size: 0.55rem;
+            color: var(--primary);
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        .orbit {
+            position: absolute;
+            border: 1px dashed var(--border-color);
+            border-radius: 50%;
+        }
+
+        .orbit-1 { 
+            width: 280px; 
+            height: 280px; 
+        }
+        
+        .orbit-2 { 
+            width: 380px; 
+            height: 380px; 
+        }
+
+        .orbit-node {
+            position: absolute;
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-glow);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            text-align: center;
+            padding: 8px;
+            transition: all 0.3s ease;
+            animation: nodeFadeSequence 6s ease-in-out infinite;
+        }
+
+        .orbit-node:hover {
+            border-color: var(--primary);
+            box-shadow: 0 0 20px var(--primary-glow);
+            transform: scale(1.1) !important;
+        }
+
+        @keyframes nodeFadeSequence {
+            0%, 5% { opacity: 0.15; transform: translateX(-50%) scale(0.95); }
+            10%, 28% { opacity: 1; transform: translateX(-50%) scale(1); }
+            33%, 100% { opacity: 0.15; transform: translateX(-50%) scale(0.95); }
+        }
+        
+        .orbit-node:nth-child(2) {
+            animation-name: nodeFadeSequence2;
+        }
+        
+        @keyframes nodeFadeSequence2 {
+            0%, 5% { opacity: 0.15; transform: translateY(-50%) scale(0.95); }
+            10%, 28% { opacity: 1; transform: translateY(-50%) scale(1); }
+            33%, 100% { opacity: 0.15; transform: translateY(-50%) scale(0.95); }
+        }
+
+        .orbit-node-num {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 4px;
+        }
+
+        .orbit-node:nth-child(1) { 
+            top: -40px; 
+            left: 50%; 
+            transform: translateX(-50%);
+            animation: nodeFadeSequence 6s ease-in-out infinite;
+            animation-delay: 0s;
+        }
+        .orbit-node:nth-child(2) { 
+            top: 50%; 
+            right: -40px; 
+            left: auto;
+            transform: translateY(-50%);
+            animation: nodeFadeSequence 6s ease-in-out infinite;
+            animation-delay: 2s;
+        }
+        .orbit-node:nth-child(3) { 
+            bottom: -40px; 
+            left: 50%; 
+            top: auto;
+            transform: translateX(-50%);
+            animation: nodeFadeSequence 6s ease-in-out infinite;
+            animation-delay: 4s;
+        }
+
+        /* EXECUTION FLOW - PIPELINE */
+        .pipeline-diagram {
+            display: flex;
+            align-items: stretch;
+            justify-content: center;
+            gap: 0;
+            margin: 60px auto;
+            max-width: 900px;
+            position: relative;
+        }
+
+        .pipeline-stage {
+            flex: 1;
+            padding: 32px 24px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            text-align: center;
+            position: relative;
+            transition: all 0.3s;
+        }
+
+        .pipeline-stage:first-child {
+            border-radius: 16px 0 0 16px;
+        }
+
+        .pipeline-stage:last-child {
+            border-radius: 0 16px 16px 0;
+        }
+
+        .pipeline-stage:hover {
+            background: var(--bg-tertiary);
+            border-color: var(--primary);
+            z-index: 2;
+        }
+
+        .pipeline-num {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--primary);
+            opacity: 0.3;
+            margin-bottom: 12px;
+        }
+
+        .pipeline-stage:hover .pipeline-num {
+            opacity: 1;
+        }
+
+        .pipeline-title {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .pipeline-desc {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .pipeline-arrow {
+            position: absolute;
+            right: -12px;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 3;
+            width: 24px;
+            height: 24px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+        }
+
+        /* NETWORK DIAGRAM - OPENCLAW ARCHITECTURE */
+        .network-diagram {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            height: 500px;
+            margin: 60px auto;
+        }
+
+        .network-center {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(255,68,68,0.3) 0%, rgba(255,68,68,0.05) 70%, transparent 100%);
+            border: 2px solid var(--primary);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+            animation: networkCenterPulse 3s ease-in-out infinite;
+        }
+
+        @keyframes networkCenterPulse {
+            0%, 100% { 
+                box-shadow: 0 0 40px var(--primary-glow), 0 0 80px rgba(255,68,68,0.2);
+            }
+            50% { 
+                box-shadow: 0 0 60px var(--primary-glow), 0 0 120px rgba(255,68,68,0.3), 0 0 160px rgba(255,68,68,0.1);
+            }
+        }
+
+        .network-center-logo {
+            width: 40px;
+            height: 40px;
+            margin-bottom: 8px;
+            filter: drop-shadow(0 0 10px rgba(255, 68, 68, 0.5));
+            border-radius: 50%;
+            background: transparent;
+            mix-blend-mode: screen;
+        }
+
+        .network-center-title {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 700;
+        }
+
+        .network-center-sub {
+            font-size: 0.7rem;
+            color: var(--primary);
+            margin-top: 4px;
+            opacity: 0.8;
+        }
+
+        .network-orbit {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .network-orbit-1 {
+            width: 280px;
+            height: 280px;
+            animation: orbitSpin 40s linear infinite;
+        }
+
+        .network-orbit-2 {
+            width: 400px;
+            height: 400px;
+            animation: orbitSpin 60s linear infinite reverse;
+        }
+
+        @keyframes orbitSpin {
+            from { transform: translate(-50%, -50%) rotate(0deg); }
+            to { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+
+        .network-token {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-glow);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.65rem;
+            color: var(--text-secondary);
+            z-index: 5;
+            transition: all 0.3s;
+            animation: tokenFloat 5s ease-in-out infinite;
+        }
+
+        .network-token:hover {
+            border-color: var(--primary);
+            box-shadow: 0 0 20px var(--primary-glow);
+            transform: scale(1.15);
+            color: var(--text-primary);
+        }
+
+        .network-token-1 { top: 0; left: 50%; transform: translateX(-50%); animation-delay: 0s; }
+        .network-token-2 { top: 20%; right: 5%; animation-delay: 0.8s; }
+        .network-token-3 { bottom: 20%; right: 5%; animation-delay: 1.6s; }
+        .network-token-4 { bottom: 0; left: 50%; transform: translateX(-50%); animation-delay: 2.4s; }
+        .network-token-5 { bottom: 20%; left: 5%; animation-delay: 3.2s; }
+        .network-token-6 { top: 20%; left: 5%; animation-delay: 4s; }
+
+        @keyframes tokenFloat {
+            0%, 100% { filter: brightness(1); }
+            50% { filter: brightness(1.2); }
+        }
+
+        .token-active {
+            border-color: var(--primary) !important;
+            box-shadow: 0 0 20px var(--primary-glow), 0 0 40px rgba(255, 68, 68, 0.3) !important;
+            color: var(--text-primary) !important;
+            background: linear-gradient(135deg, rgba(255, 68, 68, 0.2), rgba(255, 68, 68, 0.1)) !important;
+            animation: clawpPulse 2s ease-in-out infinite !important;
+        }
+
+        @keyframes clawpPulse {
+            0%, 100% { 
+                box-shadow: 0 0 20px var(--primary-glow), 0 0 40px rgba(255, 68, 68, 0.3);
+            }
+            50% { 
+                box-shadow: 0 0 30px var(--primary-glow), 0 0 60px rgba(255, 68, 68, 0.4);
+            }
+        }
+
+        .network-beam {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 200px;
+            height: 2px;
+            transform-origin: left center;
+            z-index: 1;
+        }
+
+        .network-beam::before {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary), transparent);
+            opacity: 0;
+            animation: beamPulse 3s ease-in-out infinite;
+        }
+
+        .network-beam-1 { transform: rotate(0deg); }
+        .network-beam-1::before { animation-delay: 0s; }
+        .network-beam-2 { transform: rotate(60deg); }
+        .network-beam-2::before { animation-delay: 0.5s; }
+        .network-beam-3 { transform: rotate(120deg); }
+        .network-beam-3::before { animation-delay: 1s; }
+        .network-beam-4 { transform: rotate(180deg); }
+        .network-beam-4::before { animation-delay: 1.5s; }
+        .network-beam-5 { transform: rotate(240deg); }
+        .network-beam-5::before { animation-delay: 2s; }
+        .network-beam-6 { transform: rotate(300deg); }
+        .network-beam-6::before { animation-delay: 2.5s; }
+
+        @keyframes beamPulse {
+            0%, 100% { opacity: 0; transform: scaleX(0); }
+            50% { opacity: 0.6; transform: scaleX(1); }
+        }
+
+        .network-label {
+            position: absolute;
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .network-label-left {
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            text-align: right;
+            width: 80px;
+        }
+
+        .network-label-right {
+            right: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            text-align: left;
+            width: 80px;
+        }
+
+        .network-label-title {
+            color: var(--text-primary);
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .network-flow-arrow {
+            position: absolute;
+            font-size: 1.2rem;
+            color: var(--primary);
+            animation: arrowPulse 2s ease-in-out infinite;
+        }
+
+        .network-flow-arrow-left { left: 85px; top: 50%; transform: translateY(-50%); }
+        .network-flow-arrow-right { right: 85px; top: 50%; transform: translateY(-50%); }
+
+        @keyframes arrowPulse {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 1; }
+        }
+
+        /* WHY SECTION */
+        .why-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+            margin: 60px 0;
+        }
+
+        .why-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 40px 32px;
+            text-align: center;
+            transition: all 0.3s;
+        }
+
+        .why-card:hover {
+            border-color: var(--primary);
+            transform: translateY(-8px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+        }
+
+        .why-icon {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 24px;
+            border-radius: 16px;
+            background: linear-gradient(135deg, rgba(255,68,68,0.15), rgba(255,68,68,0.05));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .why-icon svg {
+            width: 28px;
+            height: 28px;
+            stroke: var(--primary);
+        }
+
+        .why-card h3 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1.2rem;
+            margin-bottom: 12px;
+        }
+
+        .why-card p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+
+        .conclusion-box {
+            text-align: center;
+            padding: 48px;
+            background: linear-gradient(135deg, rgba(255,68,68,0.08), transparent);
+            border: 1px solid rgba(255,68,68,0.2);
+            border-radius: 20px;
+            margin-top: 48px;
+        }
+
+        .conclusion-box p {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1.4rem;
+            font-weight: 600;
+        }
+
+        /* TOKEN SECTIONS */
+        .tokens-section .section-header {
+            text-align: left;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 32px;
+        }
+
+        .section-link {
+            color: var(--primary);
+            text-decoration: none;
+            font-size: 0.95rem;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .section-link-mobile {
+            display: none;
+            color: var(--primary);
+            text-decoration: none;
+            font-size: 0.95rem;
+            margin-top: 24px;
+            text-align: center;
+        }
+
+        .section-subtext {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            margin-bottom: 32px;
+        }
+
+        .token-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+            gap: 20px;
+        }
+
+        .token-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 24px;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+
+        .token-card:hover {
+            border-color: var(--primary);
+            transform: translateY(-4px);
+            box-shadow: 0 12px 32px rgba(255, 68, 68, 0.15);
+        }
+
+        .coming-soon-card {
+            opacity: 0.7;
+            cursor: default;
+            border-style: dashed;
+            min-width: 280px;
+            flex-shrink: 0;
+        }
+
+        .coming-soon-card:hover {
+            transform: none;
+            box-shadow: none;
+            border-color: var(--border-color);
+        }
+
+        .coming-soon-avatar {
+            background: linear-gradient(135deg, var(--bg-tertiary), var(--bg-secondary)) !important;
+            color: var(--text-muted);
+            font-size: 1.5rem;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .marquee-section {
+            width: 100vw;
+            position: relative;
+            left: 50%;
+            margin-left: -50vw;
+            padding: 60px 0;
+        }
+
+        .marquee-section-header {
+            max-width: 1200px;
+            margin: 0 auto 32px;
+            padding: 0 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .marquee-section .section-link-mobile {
+            display: none;
+            max-width: 1200px;
+            margin: 16px auto 0;
+            padding: 0 40px;
+        }
+
+        .marquee-viewport {
+            width: 100vw;
+            overflow: hidden;
+        }
+
+        .marquee-track {
+            display: flex;
+            gap: 24px;
+            width: max-content;
+            flex-wrap: nowrap;
+            animation: marqueeSlide 20s linear infinite;
+            padding: 10px 0;
+        }
+
+        .marquee-track.slow {
+            animation-duration: 30s;
+        }
+
+        @keyframes marqueeSlide {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
+
+        .marquee-track .coming-soon-card,
+        .marquee-track .token-card {
+            flex: 0 0 360px;
+            flex-shrink: 0;
+            height: auto;
+        }
+
+        .trade-now-btn {
+            display: block;
+            width: 100%;
+            padding: 12px 16px;
+            margin-top: 16px;
+            background: linear-gradient(135deg, #ff4444, #cc2222);
+            color: #fff;
+            text-align: center;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.9rem;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .trade-now-btn:hover {
+            background: linear-gradient(135deg, #ff5555, #dd3333);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(255, 68, 68, 0.3);
+        }
+
+        @media (min-width: 1400px) {
+            .marquee-track .coming-soon-card,
+            .marquee-track .token-card {
+                flex: 0 0 400px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .marquee-section-header {
+                padding: 0 20px;
+                flex-direction: column;
+                gap: 16px;
+            }
+            .marquee-section-header .section-link {
+                display: none;
+            }
+            .marquee-section .section-link-mobile {
+                display: block;
+                padding: 0 20px;
+            }
+            .marquee-track .coming-soon-card,
+            .marquee-track .token-card {
+                flex: 0 0 300px;
+            }
+        }
+
+        .token-header {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 18px;
+        }
+
+        .token-image {
+            width: 52px;
+            height: 52px;
+            border-radius: 14px;
+            background: var(--bg-tertiary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 1.3rem;
+        }
+
+        .token-info h3 {
+            font-size: 1.05rem;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .token-info .symbol {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .token-stats {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9rem;
+        }
+
+        .token-stat-label { color: var(--text-secondary); }
+        .token-stat-value { font-weight: 600; }
+        .token-stat-value.positive { color: var(--success); }
+        .token-stat-value.negative { color: var(--primary); }
+
+        .token-status {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            padding: 6px 12px;
+            border-radius: 6px;
+            margin-top: 14px;
+            display: inline-block;
+        }
+
+        .token-status.live {
+            color: var(--success);
+            background: rgba(0, 255, 136, 0.1);
+            border: 1px solid rgba(0, 255, 136, 0.3);
+        }
+
+        .token-status.graduated {
+            color: var(--warning);
+            background: rgba(255, 170, 0, 0.1);
+            border: 1px solid rgba(255, 170, 0, 0.3);
+        }
+
+        .bonding-progress { margin-top: 14px; }
+        .bonding-bar {
+            height: 6px;
+            background: var(--bg-tertiary);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .bonding-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary), var(--warning));
+            border-radius: 3px;
+        }
+        .bonding-text {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-top: 6px;
+        }
+
+        /* FINAL CTA */
+        .final-cta {
+            text-align: center;
+            padding: 120px 0;
+            position: relative;
+        }
+
+        .final-cta::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 1px;
+            height: 80px;
+            background: linear-gradient(180deg, var(--border-color), transparent);
+        }
+
+        .final-cta h2 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 2.2rem;
+            font-weight: 700;
+            margin-bottom: 32px;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        /* FOOTER */
+        footer {
+            border-top: 1px solid var(--border-color);
+            padding: 64px 0 48px;
+        }
+
+        .footer-cards {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 48px;
+        }
+
+        .footer-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 32px 24px;
+            text-align: center;
+            text-decoration: none;
+            transition: border-color 0.2s, transform 0.2s;
+        }
+
+        .footer-card:hover {
+            border-color: var(--primary);
+            transform: translateY(-2px);
+        }
+
+        .footer-card-icon {
+            width: 40px;
+            height: 40px;
+            margin: 0 auto 16px;
+            color: var(--primary);
+        }
+
+        .footer-card-icon svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .footer-card-title {
+            color: var(--text-primary);
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .footer-card-desc {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+        }
+
+        /* Access Channels Section */
+        .access-channels {
+            margin-top: 80px;
+            margin-bottom: 80px;
+            padding: 0 20px;
+        }
+
+        .access-channels-header {
+            text-align: center;
+            margin-bottom: 48px;
+        }
+
+        .access-channels-title {
+            color: var(--text-primary);
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 16px;
+            letter-spacing: -0.02em;
+        }
+
+        .access-channels-subtitle {
+            color: var(--text-secondary);
+            font-size: 1rem;
+            max-width: 600px;
+            margin: 0 auto;
+            line-height: 1.7;
+        }
+
+        .channels-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .channel-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 28px;
+            transition: all 0.3s;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            min-height: 200px;
+        }
+
+        .channel-card:hover:not(.disabled) {
+            border-color: var(--primary);
+            transform: translateY(-6px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+        }
+
+        .channel-card.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .channel-card.disabled:hover {
+            transform: none;
+            box-shadow: none;
+        }
+
+        .channel-card-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 18px;
+        }
+
+        .channel-logo {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--bg-tertiary);
+            flex-shrink: 0;
+        }
+
+        .channel-logo svg {
+            width: 26px;
+            height: 26px;
+        }
+
+        .channel-logo img {
+            width: 28px;
+            height: 24px;
+            object-fit: contain;
+        }
+
+        .channel-info {
+            flex: 1;
+        }
+
+        .channel-name {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: var(--text-primary);
+        }
+
+        .channel-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 20px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .channel-status.live {
+            background: rgba(0, 255, 136, 0.15);
+            color: var(--success);
+        }
+
+        .channel-status.live::before {
+            content: '';
+            width: 6px;
+            height: 6px;
+            background: var(--success);
+            border-radius: 50%;
+            animation: statusPulse 2s infinite;
+        }
+
+        @keyframes statusPulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .channel-status.private {
+            background: rgba(136, 136, 170, 0.15);
+            color: var(--text-secondary);
+        }
+
+        .channel-status.internal {
+            background: rgba(255, 170, 0, 0.15);
+            color: var(--warning);
+        }
+
+        .channel-desc {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            line-height: 1.6;
+            margin-bottom: 20px;
+            flex: 1;
+        }
+
+        .channel-cta {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 22px;
+            background: linear-gradient(135deg, var(--primary), #ff6b6b);
+            color: white;
+            border-radius: 12px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.2s;
+            margin-top: auto;
+        }
+
+        .channel-cta:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(255, 68, 68, 0.4);
+        }
+
+        .channel-cta svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        .channel-tooltip {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            font-style: italic;
+            margin-top: auto;
+        }
+
+        .access-channels-footer {
+            text-align: center;
+            margin-top: 48px;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            line-height: 1.7;
+        }
+
+        @media (max-width: 900px) {
+            .channels-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 600px) {
+            .channels-grid {
+                grid-template-columns: 1fr;
+            }
+            .access-channels-title {
+                font-size: 1.5rem;
+            }
+            .channel-desc {
+                min-height: auto;
+            }
+        }
+
+        .footer-bottom {
+            text-align: center;
+        }
+
+        .footer-nav {
+            display: flex;
+            justify-content: center;
+            gap: 32px;
+            margin-bottom: 24px;
+        }
+
+        .footer-nav a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: color 0.2s;
+        }
+
+        .footer-nav a:hover {
+            color: var(--primary);
+        }
+
+        .footer-nav span {
+            color: var(--text-secondary);
+            opacity: 0.5;
+        }
+
+        .footer-attribution {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            margin-bottom: 8px;
+        }
+
+        .footer-attribution a {
+            color: var(--primary);
+            text-decoration: none;
+        }
+
+        .footer-disclaimer {
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+            opacity: 0.7;
+        }
+
+        /* RESPONSIVE */
+        @media (max-width: 900px) {
+            .why-grid { grid-template-columns: 1fr; }
+            .pipeline-diagram { flex-direction: column; }
+            .pipeline-stage { border-radius: 12px !important; }
+            .pipeline-arrow { display: none; }
+            .circular-diagram { transform: scale(0.8); }
+            .network-diagram { height: 300px; }
+        }
+
+        @media (max-width: 768px) {
+            .hero { padding: 60px 0; }
+            .hero-mascot { width: 160px; height: 160px; margin-bottom: 24px; }
+            .hero-mascot-badge { transform: scale(0.8); bottom: -8px; left: -10px; }
+            .hero-brand { font-size: 3rem; letter-spacing: -1px; }
+            .hero-tagline { font-size: 1rem; letter-spacing: 2px; }
+            .hero .description { font-size: 1rem; }
+            .section-title { font-size: 1.8rem; }
+            .flow-diagram { flex-direction: column; gap: 20px; }
+            .flow-connector { width: 2px; height: 40px; }
+            .flow-connector::after { display: none; }
+            .token-grid { grid-template-columns: 1fr; }
+            .circular-diagram { 
+                transform: scale(0.65); 
+                margin: 20px auto;
+                width: 320px;
+                height: 320px;
+            }
+            .network-diagram { 
+                transform: scale(0.55); 
+                height: 280px;
+                margin: 20px auto;
+            }
+            .network-label { font-size: 0.6rem; }
+            .network-label-left, .network-label-right { width: 60px; }
+            .network-token { width: 50px; height: 50px; font-size: 0.55rem; }
+            .network-center { width: 100px; height: 100px; }
+            .network-center-logo { width: 28px; height: 28px; }
+            .network-center-title { font-size: 0.85rem; }
+            .network-center-sub { font-size: 0.6rem; }
+            .footer-links { flex-wrap: wrap; gap: 20px; }
+            .tokens-section .section-link { display: none; }
+            .section-link-mobile { display: block; }
+            .footer-cards { grid-template-columns: repeat(2, 1fr); }
+            .footer-nav { flex-wrap: wrap; gap: 16px; }
+        }
+
+        /* Loading Screen */
+        .loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--bg-primary);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 99999;
+            transition: opacity 0.5s ease, visibility 0.5s ease;
+        }
+
+        .loading-screen.hidden {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        .loading-lobster {
+            position: relative;
+            width: 140px;
+            height: 120px;
+            margin-bottom: 40px;
+        }
+
+        .loading-lobster-body {
+            position: absolute;
+            width: 90px;
+            height: 60px;
+            background: linear-gradient(135deg, #ff6b5b 0%, #e74c3c 50%, #c0392b 100%);
+            border-radius: 50% 50% 40% 40%;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 8px 40px rgba(231, 76, 60, 0.5);
+            animation: loadingBob 1.2s ease-in-out infinite;
+        }
+
+        .loading-lobster-body::after {
+            content: '';
+            position: absolute;
+            width: 30px;
+            height: 45px;
+            background: linear-gradient(to bottom, #e74c3c, #c0392b);
+            bottom: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-radius: 0 0 50% 50%;
+            clip-path: polygon(20% 0, 80% 0, 100% 100%, 50% 80%, 0 100%);
+        }
+
+        .loading-eye {
+            position: absolute;
+            width: 14px;
+            height: 18px;
+            background: white;
+            border-radius: 50%;
+            top: 12px;
+        }
+
+        .loading-eye::after {
+            content: '';
+            position: absolute;
+            width: 7px;
+            height: 7px;
+            background: #222;
+            border-radius: 50%;
+            top: 5px;
+            left: 50%;
+            transform: translateX(-50%);
+            animation: loadingEyeMove 2.5s ease-in-out infinite;
+        }
+
+        .loading-eye.left { left: 18px; }
+        .loading-eye.right { right: 18px; }
+
+        .loading-claw {
+            position: absolute;
+            width: 26px;
+            height: 20px;
+            background: linear-gradient(135deg, #ff6b5b, #e74c3c);
+            border-radius: 50% 50% 30% 30%;
+            top: 28px;
+            box-shadow: 0 4px 15px rgba(231, 76, 60, 0.4);
+        }
+
+        .loading-claw::before {
+            content: '';
+            position: absolute;
+            width: 12px;
+            height: 14px;
+            background: linear-gradient(135deg, #ff6b5b, #e74c3c);
+            border-radius: 50%;
+            top: -6px;
+        }
+
+        .loading-claw.left {
+            left: -18px;
+            animation: loadingClawLeft 1s ease-in-out infinite;
+        }
+        .loading-claw.left::before { right: 0; }
+
+        .loading-claw.right {
+            right: -18px;
+            animation: loadingClawRight 1s ease-in-out infinite;
+        }
+        .loading-claw.right::before { left: 0; }
+
+        .loading-antenna {
+            position: absolute;
+            width: 3px;
+            height: 28px;
+            background: linear-gradient(to top, #e74c3c, #ff6b5b);
+            top: -20px;
+            border-radius: 3px;
+        }
+
+        .loading-antenna::after {
+            content: '';
+            position: absolute;
+            width: 6px;
+            height: 6px;
+            background: #ff6b5b;
+            border-radius: 50%;
+            top: 0;
+            left: -1.5px;
+        }
+
+        .loading-antenna.left {
+            left: 26px;
+            transform: rotate(-25deg);
+            animation: loadingAntennaLeft 1.5s ease-in-out infinite;
+        }
+
+        .loading-antenna.right {
+            right: 26px;
+            transform: rotate(25deg);
+            animation: loadingAntennaRight 1.5s ease-in-out infinite;
+        }
+
+        .loading-bubbles {
+            position: absolute;
+            top: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .loading-bubbles span {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            background: rgba(100, 200, 255, 0.7);
+            border-radius: 50%;
+            animation: loadingBubble 2s ease-in-out infinite;
+        }
+
+        .loading-bubbles span:nth-child(1) { left: -15px; animation-delay: 0s; }
+        .loading-bubbles span:nth-child(2) { left: 0; animation-delay: 0.4s; }
+        .loading-bubbles span:nth-child(3) { left: 15px; animation-delay: 0.8s; }
+
+        .loading-headline {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            text-align: center;
+            margin-bottom: 12px;
+            opacity: 0;
+            animation: fadeInUp 0.8s ease forwards 0.3s;
+        }
+
+        .loading-tagline {
+            font-family: 'Inter', sans-serif;
+            font-size: 1rem;
+            color: var(--text-secondary);
+            text-align: center;
+            opacity: 0;
+            animation: fadeInUp 0.8s ease forwards 0.5s;
+        }
+
+        .loading-tagline span {
+            color: var(--primary);
+            font-weight: 600;
+        }
+
+        @keyframes loadingBob {
+            0%, 100% { transform: translate(-50%, -50%) translateY(0); }
+            50% { transform: translate(-50%, -50%) translateY(-8px); }
+        }
+
+        @keyframes loadingEyeMove {
+            0%, 100% { transform: translateX(-50%); }
+            25% { transform: translateX(-80%); }
+            75% { transform: translateX(-20%); }
+        }
+
+        @keyframes loadingClawLeft {
+            0%, 100% { transform: rotate(0deg); }
+            50% { transform: rotate(-20deg); }
+        }
+
+        @keyframes loadingClawRight {
+            0%, 100% { transform: rotate(0deg); }
+            50% { transform: rotate(20deg); }
+        }
+
+        @keyframes loadingAntennaLeft {
+            0%, 100% { transform: rotate(-25deg); }
+            50% { transform: rotate(-40deg); }
+        }
+
+        @keyframes loadingAntennaRight {
+            0%, 100% { transform: rotate(25deg); }
+            50% { transform: rotate(40deg); }
+        }
+
+        @keyframes loadingBubble {
+            0% { opacity: 0; transform: translateY(0) scale(0.5); }
+            50% { opacity: 1; transform: translateY(-20px) scale(1); }
+            100% { opacity: 0; transform: translateY(-40px) scale(0.5); }
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @media (max-width: 600px) {
+            .loading-headline { font-size: 1.5rem; padding: 0 20px; }
+            .loading-tagline { font-size: 0.9rem; }
+            .loading-lobster { transform: scale(0.85); margin-bottom: 30px; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div class="loading-screen" id="loadingScreen">
+        <div class="loading-lobster">
+            <div class="loading-lobster-body">
+                <div class="loading-eye left"></div>
+                <div class="loading-eye right"></div>
+                <div class="loading-claw left"></div>
+                <div class="loading-claw right"></div>
+                <div class="loading-antenna left"></div>
+                <div class="loading-antenna right"></div>
+            </div>
+            <div class="loading-bubbles">
+                <span></span><span></span><span></span>
+            </div>
+        </div>
+        <h1 class="loading-headline">The Lobster That Tokenizes Anything</h1>
+        <p class="loading-tagline">Powered by <span>OpenClaw</span></p>
+    </div>
+
+    <div class="container">
+        <section class="hero">
+            <div class="hero-mascot">
+                <img src="/logo.png" alt="CLAWP Agent" class="hero-logo">
+                <div class="hero-mascot-badge">
+                    <div class="hero-lobster">
+                        <div class="hero-lobster-body">
+                            <div class="hero-lobster-eye left"></div>
+                            <div class="hero-lobster-eye right"></div>
+                            <div class="hero-lobster-claw left"></div>
+                            <div class="hero-lobster-claw right"></div>
+                            <div class="hero-lobster-antenna left"></div>
+                            <div class="hero-lobster-antenna right"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <h1 class="hero-brand">ClawPad</h1>
+            <div class="hero-tagline-wrapper">
+                <p class="hero-tagline hero-tagline-1">THE AI THAT TOKENIZES ANYTHING.</p>
+                <p class="hero-tagline hero-tagline-2">ONE PROMPT. FULL EXECUTION.</p>
+                <p class="hero-tagline hero-tagline-3">AUTONOMOUS BY DESIGN.</p>
+            </div>
+            <p class="description">
+                Tokenize anything with autonomous agents powered by OpenClaw intelligence.<br>
+                Submit an idea. OpenClaw executes creation, deployment, and buyback & burn autonomously.
+            </p>
+            <div class="hero-cta">
+                <a href="/app" class="btn btn-primary">CLAWP AGENT</a>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-header">
+                <div class="section-label">How It Works</div>
+                <h2 class="section-title">Autonomous by design</h2>
+                <p class="section-text">Once an idea is submitted, execution proceeds without further input. Creation, deployment, and ongoing operations are handled by OpenClaw-powered agents.</p>
+            </div>
+
+            <div class="circular-diagram">
+                <div class="orbit orbit-2"></div>
+                <div class="orbit orbit-1">
+                    <div class="orbit-node">
+                        <div class="orbit-node-num">01</div>
+                        Submit
+                    </div>
+                    <div class="orbit-node">
+                        <div class="orbit-node-num">02</div>
+                        Execute
+                    </div>
+                    <div class="orbit-node">
+                        <div class="orbit-node-num">03</div>
+                        Operate
+                    </div>
+                </div>
+                <div class="circular-center">
+                    <div class="circular-center-icon">
+                        <div class="mini-lobster-center">
+                            <div class="mini-lobster-center-body">
+                                <div class="mini-lobster-center-eye left"></div>
+                                <div class="mini-lobster-center-eye right"></div>
+                                <div class="mini-lobster-center-claw left"></div>
+                                <div class="mini-lobster-center-claw right"></div>
+                                <div class="mini-lobster-center-antenna left"></div>
+                                <div class="mini-lobster-center-antenna right"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="circular-center-text">CLAWP AGENT</div>
+                    <div class="openclaw-badge">
+                        <img src="/openclaw-logo.png" alt="OpenClaw" class="openclaw-badge-icon">
+                        <span>OpenClaw</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-header">
+                <div class="section-label">Process</div>
+                <h2 class="section-title">Execution flow</h2>
+                <p class="section-text">Execution follows a single uninterrupted flow from prompt to autonomous operation.</p>
+            </div>
+
+            <div class="pipeline-diagram">
+                <div class="pipeline-stage">
+                    <div class="pipeline-num">01</div>
+                    <div class="pipeline-title">Prompt</div>
+                    <div class="pipeline-desc">Describe your token idea</div>
+                    <div class="pipeline-arrow">→</div>
+                </div>
+                <div class="pipeline-stage">
+                    <div class="pipeline-num">02</div>
+                    <div class="pipeline-title">Creation</div>
+                    <div class="pipeline-desc">AI generates blueprint</div>
+                    <div class="pipeline-arrow">→</div>
+                </div>
+                <div class="pipeline-stage">
+                    <div class="pipeline-num">03</div>
+                    <div class="pipeline-title">Deployment</div>
+                    <div class="pipeline-desc">Launch to pump.fun</div>
+                    <div class="pipeline-arrow">→</div>
+                </div>
+                <div class="pipeline-stage">
+                    <div class="pipeline-num">04</div>
+                    <div class="pipeline-title">Operations</div>
+                    <div class="pipeline-desc">Autonomous management</div>
+                </div>
+            </div>
+        </section>
+
+    </div>
+
+    <section class="marquee-section" id="recently-launched">
+        <div class="marquee-section-header">
+            <div>
+                <h2 class="section-title">Recently launched</h2>
+                <p class="section-subtext">Live tokens currently operating under ClawPad automation.</p>
+            </div>
+            <a href="/app#active" class="section-link">View All →</a>
+        </div>
+        <div class="marquee-viewport">
+            <div class="marquee-track" id="activeTokens"></div>
+        </div>
+        <a href="/app#active" class="section-link-mobile">View All →</a>
+    </section>
+
+    <section class="marquee-section">
+        <div class="marquee-section-header">
+            <div>
+                <h2 class="section-title">Recently graduated</h2>
+                <p class="section-subtext">Tokens that have completed their initial launch phase and continue operating autonomously.</p>
+            </div>
+            <a href="/app#graduated" class="section-link">View All →</a>
+        </div>
+        <div class="marquee-viewport">
+            <div class="marquee-track slow" id="graduatedTokens"></div>
+        </div>
+        <a href="/app#graduated" class="section-link-mobile">View All →</a>
+    </section>
+
+    <div class="container">
+
+        <section class="section">
+            <div class="section-header">
+                <div class="section-label">Technology</div>
+                <h2 class="section-title">OpenClaw intelligence</h2>
+                <p class="section-text">ClawPad runs on OpenClaw, an autonomous intelligence layer built to execute token launches at scale.</p>
+            </div>
+
+            <div class="network-diagram">
+                <div class="network-orbit network-orbit-2"></div>
+                <div class="network-orbit network-orbit-1"></div>
+                
+                <div class="network-beam network-beam-1"></div>
+                <div class="network-beam network-beam-2"></div>
+                <div class="network-beam network-beam-3"></div>
+                <div class="network-beam network-beam-4"></div>
+                <div class="network-beam network-beam-5"></div>
+                <div class="network-beam network-beam-6"></div>
+                
+                <div class="network-center">
+                    <img src="/openclaw-logo.png" alt="OpenClaw" class="network-center-logo">
+                    <div class="network-center-title">OpenClaw</div>
+                    <div class="network-center-sub">AGENT CORE</div>
+                </div>
+                
+                <div class="network-token network-token-1 token-active">$CLAWP</div>
+                <div class="network-token network-token-2">$MEME</div>
+                <div class="network-token network-token-3">$MEME</div>
+                <div class="network-token network-token-4">$MEME</div>
+                <div class="network-token network-token-5">$MEME</div>
+                <div class="network-token network-token-6">$MEME</div>
+
+                <div class="network-label network-label-left">
+                    <div class="network-label-title">Input</div>
+                    <div>User Prompt</div>
+                </div>
+                <div class="network-flow-arrow network-flow-arrow-left">→</div>
+                
+                <div class="network-label network-label-right">
+                    <div class="network-label-title">Output</div>
+                    <div>Live Tokens</div>
+                </div>
+                <div class="network-flow-arrow network-flow-arrow-right">→</div>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-header">
+                <div class="section-label">Benefits</div>
+                <h2 class="section-title">Why ClawPad</h2>
+            </div>
+
+            <div class="why-grid">
+                <div class="why-card">
+                    <div class="why-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                        </svg>
+                    </div>
+                    <h3>No manual execution</h3>
+                    <p>From idea to live token without touching a single button. The system handles everything autonomously.</p>
+                </div>
+                <div class="why-card">
+                    <div class="why-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                            <path d="M3 3v5h5"/>
+                            <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
+                            <path d="M16 16h5v5"/>
+                        </svg>
+                    </div>
+                    <h3>No ongoing coordination</h3>
+                    <p>Once launched, operations continue without requiring your attention or intervention.</p>
+                </div>
+                <div class="why-card">
+                    <div class="why-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"/>
+                            <circle cx="12" cy="12" r="6"/>
+                            <circle cx="12" cy="12" r="2"/>
+                        </svg>
+                    </div>
+                    <h3>No operational overhead</h3>
+                    <p>Zero maintenance required. The intelligence layer manages all token operations continuously.</p>
+                </div>
+            </div>
+
+            <div class="conclusion-box">
+                <p>One prompt away from launch.</p>
+            </div>
+        </section>
+
+        <section class="final-cta">
+            <h2>Describe your token. OpenClaw does the rest.</h2>
+            <a href="/app" class="btn btn-primary">Start with a prompt</a>
+        </section>
+
+        <footer>
+            <div class="footer-cards">
+                <a href="https://x.com/clawpad" target="_blank" class="footer-card">
+                    <div class="footer-card-icon">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                        </svg>
+                    </div>
+                    <div class="footer-card-title">X (Twitter)</div>
+                    <div class="footer-card-desc">Follow updates</div>
+                </a>
+                <a href="/docs" class="footer-card">
+                    <div class="footer-card-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                            <line x1="16" y1="13" x2="8" y2="13"/>
+                            <line x1="16" y1="17" x2="8" y2="17"/>
+                            <polyline points="10 9 9 9 8 9"/>
+                        </svg>
+                    </div>
+                    <div class="footer-card-title">Documentation</div>
+                    <div class="footer-card-desc">Learn the ropes</div>
+                </a>
+                <a href="https://github.com/Clawpad" target="_blank" class="footer-card">
+                    <div class="footer-card-icon">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                        </svg>
+                    </div>
+                    <div class="footer-card-title">GitHub</div>
+                    <div class="footer-card-desc">View the source</div>
+                </a>
+                <a href="https://clawhub.ai/iclawn/clawp" target="_blank" class="footer-card">
+                    <div class="footer-card-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                        </svg>
+                    </div>
+                    <div class="footer-card-title">ClawHub</div>
+                    <div class="footer-card-desc">CLAWP on OpenClaw</div>
+                </a>
+            </div>
+
+            <div class="access-channels">
+                <div class="access-channels-header">
+                    <h3 class="access-channels-title">Integrated Access Channels</h3>
+                    <p class="access-channels-subtitle">ClawPad operates as a single autonomous system with multiple agent interfaces. Availability varies by channel.</p>
+                </div>
+
+                <div class="channels-grid">
+                    <!-- Web App - LIVE -->
+                    <div class="channel-card">
+                        <div class="channel-card-header">
+                            <div class="channel-logo">
+                                <img src="/logo.png" alt="ClawPad">
+                            </div>
+                            <div class="channel-info">
+                                <div class="channel-name">Web App</div>
+                                <span class="channel-status live">Live</span>
+                            </div>
+                        </div>
+                        <p class="channel-desc">Primary interface for interacting with ClawPad agents. Submit prompts, review blueprints, select assets, and proceed through execution flow.</p>
+                        <a href="/app" class="channel-cta">
+                            Launch Web App
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="5" y1="12" x2="19" y2="12"/>
+                                <polyline points="12 5 19 12 12 19"/>
+                            </svg>
+                        </a>
+                    </div>
+
+                    <!-- Telegram - PRIVATE -->
+                    <div class="channel-card disabled">
+                        <div class="channel-card-header">
+                            <div class="channel-logo">
+                                <svg viewBox="0 0 24 24" fill="#26A5E4">
+                                    <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/>
+                                </svg>
+                            </div>
+                            <div class="channel-info">
+                                <div class="channel-name">Telegram Bot</div>
+                                <span class="channel-status private">Connected (private)</span>
+                            </div>
+                        </div>
+                        <p class="channel-desc">Full agent interface for prompt-driven interaction, execution control, and notifications. Currently restricted to internal access.</p>
+                        <span class="channel-tooltip">Connected internally. Public access is not enabled yet.</span>
+                    </div>
+
+                    <!-- Discord - PRIVATE -->
+                    <div class="channel-card disabled">
+                        <div class="channel-card-header">
+                            <div class="channel-logo">
+                                <svg viewBox="0 0 24 24" fill="#5865F2">
+                                    <path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/>
+                                </svg>
+                            </div>
+                            <div class="channel-info">
+                                <div class="channel-name">Discord Bot</div>
+                                <span class="channel-status private">Connected (private)</span>
+                            </div>
+                        </div>
+                        <p class="channel-desc">Team-oriented agent interface for collaborative blueprint review and execution monitoring. Not publicly accessible at this stage.</p>
+                        <span class="channel-tooltip">Internal access only.</span>
+                    </div>
+
+                    <!-- X Agent - PRIVATE -->
+                    <div class="channel-card disabled">
+                        <div class="channel-card-header">
+                            <div class="channel-logo">
+                                <svg viewBox="0 0 24 24" fill="#ffffff">
+                                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                                </svg>
+                            </div>
+                            <div class="channel-info">
+                                <div class="channel-name">X Agent</div>
+                                <span class="channel-status private">Connected (private)</span>
+                            </div>
+                        </div>
+                        <p class="channel-desc">Agent interface on X enabling prompt-based interaction and execution flows directly from conversations. Currently not publicly accessible.</p>
+                        <span class="channel-tooltip">Agent interface connected internally. Public access is not enabled yet.</span>
+                    </div>
+
+                    <!-- WhatsApp - PRIVATE -->
+                    <div class="channel-card disabled">
+                        <div class="channel-card-header">
+                            <div class="channel-logo">
+                                <svg viewBox="0 0 24 24" fill="#25D366">
+                                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/>
+                                </svg>
+                            </div>
+                            <div class="channel-info">
+                                <div class="channel-name">WhatsApp Bot</div>
+                                <span class="channel-status private">Connected (private)</span>
+                            </div>
+                        </div>
+                        <p class="channel-desc">Mobile-first agent interface for prompt-driven interaction and notifications. Currently restricted to internal testing.</p>
+                        <span class="channel-tooltip">Private access.</span>
+                    </div>
+
+                    <!-- API - INTERNAL -->
+                    <div class="channel-card disabled">
+                        <div class="channel-card-header">
+                            <div class="channel-logo">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" stroke-width="2">
+                                    <path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM17 14v3h3M14 17h3v3"/>
+                                </svg>
+                            </div>
+                            <div class="channel-info">
+                                <div class="channel-name">API & Webhooks</div>
+                                <span class="channel-status internal">Internal</span>
+                            </div>
+                        </div>
+                        <p class="channel-desc">Programmatic interface to ClawPad's autonomous execution engine, used for internal integrations.</p>
+                        <span class="channel-tooltip">Internal use only.</span>
+                    </div>
+                </div>
+
+                <p class="access-channels-footer">All agent interfaces connect to the same autonomous execution engine.<br>Public availability varies by interface.</p>
+            </div>
+
+            <div class="footer-bottom">
+                <nav class="footer-nav">
+                    <a href="/tokens">Tokens</a>
+                    <span>·</span>
+                    <a href="/features">Features</a>
+                    <span>·</span>
+                    <a href="/openclaw">OpenClaw</a>
+                    <span>·</span>
+                    <a href="/app">Launch App</a>
+                </nav>
+                <p class="footer-attribution">Built with <a href="https://openclaw.ai" target="_blank">OpenClaw</a>, autonomous AI framework.</p>
+                <p class="footer-disclaimer">Powered by OpenClaw Intelligence. The future of autonomous tokenization.</p>
+            </div>
+        </footer>
+    </div>
+
+    <script src="/mock-data.js"></script>
+    <script>
+        function renderTokenCard(token, showStatus = false, statusType = 'live') {
+            const pumpUrl = token.pumpfunUrl || `https://pump.fun/coin/${token.mintAddress}`;
+            const bondingProgress = token.bondingProgress || 0;
+            
+            let statusHTML = '';
+            if (showStatus) {
+                const statusClass = statusType === 'live' ? 'live' : 'graduated';
+                const statusLabel = statusType === 'live' ? 'LIVE' : 'GRADUATED';
+                statusHTML = `<div class="token-status ${statusClass}">${statusLabel}</div>`;
+            }
+
+            let bondingHTML = '';
+            if (statusType === 'live' && bondingProgress > 0) {
+                bondingHTML = `
+                    <div class="bonding-progress">
+                        <div class="bonding-bar">
+                            <div class="bonding-fill" style="width: ${bondingProgress}%"></div>
+                        </div>
+                        <div class="bonding-text">
+                            <span>Bonding</span>
+                            <span>${bondingProgress}%</span>
+                        </div>
+                    </div>
+                `;
+            }
+
+            return `
+                <div class="token-card">
+                    <div class="token-header">
+                        <div class="token-image" style="background: linear-gradient(135deg, #${Math.random().toString(16).substr(2,6)}, #${Math.random().toString(16).substr(2,6)}); overflow: hidden;">
+                            ${token.imageUrl ? `<img src="${token.imageUrl}" alt="${token.symbol}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 14px;" onerror="this.style.display='none'; this.parentElement.innerHTML='${token.symbol ? token.symbol.charAt(0) : '?'}';">` : (token.symbol ? token.symbol.charAt(0) : '?')}
+                        </div>
+                        <div class="token-info">
+                            <h3>${token.name || 'Unknown'}</h3>
+                            <span class="symbol">$${token.symbol || '???'}</span>
+                        </div>
+                    </div>
+                    <div class="token-stats">
+                        <div>
+                            <div class="token-stat-label">Market Cap</div>
+                            <div class="token-stat-value">${formatMarketCap(token.marketCap)}</div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div class="token-stat-label">Bonding</div>
+                            <div class="token-stat-value">${bondingProgress}%</div>
+                        </div>
+                    </div>
+                    ${bondingHTML}
+                    ${statusHTML}
+                    <a href="${pumpUrl}" target="_blank" class="trade-now-btn">Trade Now →</a>
+                </div>
+            `;
+        }
+
+        async function renderTokens() {
+            const activeContainer = document.getElementById('activeTokens');
+            const graduatedContainer = document.getElementById('graduatedTokens');
+            
+            const comingSoonCard = `
+                <div class="token-card coming-soon-card">
+                    <div class="token-card-header">
+                        <div class="token-avatar coming-soon-avatar">?</div>
+                        <div class="token-info">
+                            <div class="token-name">Coming Soon</div>
+                            <div class="token-symbol">$???</div>
+                        </div>
+                    </div>
+                    <div class="token-progress">
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 0%"></div>
+                        </div>
+                        <div class="progress-text">Awaiting Launch</div>
+                    </div>
+                </div>
+            `;
+            
+            const placeholderCards = comingSoonCard.repeat(8);
+            
+            try {
+                const [activeRes, gradRes] = await Promise.all([
+                    fetch('/api/tokens?status=active'),
+                    fetch('/api/tokens?status=graduated')
+                ]);
+                const activeData = await activeRes.json();
+                const gradData = await gradRes.json();
+                
+                const active = activeData.success ? activeData.tokens : [];
+                const graduated = gradData.success ? gradData.tokens : [];
+                
+                if (active.length > 0) {
+                    const cards = active.map(t => renderTokenCard(t, true, 'live')).join('');
+                    activeContainer.innerHTML = cards + cards;
+                } else {
+                    activeContainer.innerHTML = placeholderCards + placeholderCards;
+                }
+                
+                if (graduated.length > 0) {
+                    const cards = graduated.map(t => renderTokenCard(t, true, 'graduated')).join('');
+                    graduatedContainer.innerHTML = cards + cards;
+                } else {
+                    graduatedContainer.innerHTML = placeholderCards + placeholderCards;
+                }
+            } catch (e) {
+                console.error('Failed to load tokens:', e);
+                activeContainer.innerHTML = placeholderCards + placeholderCards;
+                graduatedContainer.innerHTML = placeholderCards + placeholderCards;
+            }
+        }
+        
+        renderTokens();
+        setInterval(renderTokens, 30000);
+
+        // Hide loading screen after page fully loads
+        window.addEventListener('load', function() {
+            setTimeout(function() {
+                const loadingScreen = document.getElementById('loadingScreen');
+                if (loadingScreen) {
+                    loadingScreen.classList.add('hidden');
+                }
+            }, 1800); // Show loading for 1.8 seconds minimum
+        });
+
+    </script>
+</body>
+</html>
