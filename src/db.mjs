@@ -56,8 +56,8 @@ export async function createToken(data) {
   const result = await query(
     `INSERT INTO tokens (
       mint_address, name, symbol, description, image_url, metadata_uri,
-      wallet_public_key, wallet_private_key_encrypted, status
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      wallet_public_key, wallet_private_key_encrypted, status, website_url, twitter_url
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
     RETURNING *`,
     [
       data.mintAddress,
@@ -68,7 +68,9 @@ export async function createToken(data) {
       data.metadataUri,
       data.walletPublicKey,
       data.walletPrivateKeyEncrypted,
-      data.status || 'active'
+      data.status || 'active',
+      data.websiteUrl || null,
+      data.twitterUrl || null
     ]
   );
   return result.rows[0];
@@ -88,6 +90,42 @@ export async function getTokenByMint(mintAddress) {
     [mintAddress]
   );
   return result.rows[0];
+}
+
+export async function getTokenBySlug(slug) {
+  if (!slug) return null;
+  const result = await query(
+    `SELECT * FROM tokens WHERE slug = $1`,
+    [slug.toLowerCase()]
+  );
+  return result.rows[0];
+}
+
+export async function updateTokenLandingData(id, narrative, themePrimary, themeAccent, slug) {
+  const safeSlug = slug ? slug.toLowerCase() : null;
+  const result = await query(
+    `UPDATE tokens SET narrative = $1, theme_primary = $2, theme_accent = $3, slug = $4 WHERE id = $5 RETURNING *`,
+    [narrative, themePrimary, themeAccent, safeSlug, id]
+  );
+  return result.rows[0];
+}
+
+export async function generateUniqueSlug(baseSlug) {
+  const cleanSlug = baseSlug.toLowerCase().replace(/[^a-z0-9]/g, '');
+  let slug = cleanSlug;
+  let counter = 2;
+  
+  while (true) {
+    const existing = await query(
+      `SELECT id FROM tokens WHERE slug = $1`,
+      [slug]
+    );
+    if (existing.rows.length === 0) {
+      return slug;
+    }
+    slug = `${cleanSlug}-${counter}`;
+    counter++;
+  }
 }
 
 export async function getActiveTokens(limit = 50) {
@@ -254,12 +292,23 @@ export async function releaseVanityAddress(id) {
   return result.rows[0];
 }
 
+export async function markVanityAddressBurned(id) {
+  const result = await query(
+    `UPDATE vanity_addresses 
+     SET status = 'burned', used_at = NOW(), updated_at = NOW()
+     WHERE id = $1 RETURNING *`,
+    [id]
+  );
+  return result.rows[0];
+}
+
 export async function getVanityPoolStats() {
   const result = await query(
     `SELECT 
       COUNT(*) FILTER (WHERE status = 'available') as available,
       COUNT(*) FILTER (WHERE status = 'reserved') as reserved,
       COUNT(*) FILTER (WHERE status = 'used') as used,
+      COUNT(*) FILTER (WHERE status = 'burned') as burned,
       COUNT(*) as total
      FROM vanity_addresses`
   );
@@ -268,6 +317,7 @@ export async function getVanityPoolStats() {
     available: parseInt(row.available) || 0,
     reserved: parseInt(row.reserved) || 0,
     used: parseInt(row.used) || 0,
+    burned: parseInt(row.burned) || 0,
     total: parseInt(row.total) || 0
   };
 }
@@ -289,6 +339,9 @@ export default {
   createToken,
   getToken,
   getTokenByMint,
+  getTokenBySlug,
+  updateTokenLandingData,
+  generateUniqueSlug,
   getActiveTokens,
   getGraduatedTokens,
   getAllTokens,
@@ -306,6 +359,7 @@ export default {
   reserveVanityAddress,
   markVanityAddressUsed,
   releaseVanityAddress,
+  markVanityAddressBurned,
   getVanityPoolStats,
   getAvailableVanityCount
 };
