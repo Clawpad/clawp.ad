@@ -26,7 +26,7 @@ const anthropic = new Anthropic({
 const CLAWP_SYSTEM_PROMPT = fs.readFileSync('./skills/clawp/prompt.txt', 'utf-8');
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 
 const app = express();
 const server = createServer(app);
@@ -42,6 +42,40 @@ function isValidUUID(str) {
 function sanitizeText(str, maxLength = 500) {
   if (typeof str !== 'string') return '';
   return str.slice(0, maxLength).replace(/[<>]/g, '');
+}
+
+function escapeHtml(str) {
+  if (typeof str !== 'string') return '';
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function generateThemeColors(narrative, name, description) {
+  const text = `${narrative || ''} ${name || ''} ${description || ''}`.toLowerCase();
+  const themes = [
+    { keywords: ['dog', 'doge', 'shiba', 'puppy', 'woof', 'loyal'], primary: '#ff8c00', accent: '#ffd700' },
+    { keywords: ['cat', 'kitty', 'meow', 'feline', 'nyan'], primary: '#9b59b6', accent: '#e91e63' },
+    { keywords: ['dragon', 'fire', 'flame', 'burn', 'blaze'], primary: '#ff4444', accent: '#ff6b6b' },
+    { keywords: ['moon', 'lunar', 'night', 'dark', 'shadow'], primary: '#3498db', accent: '#9b59b6' },
+    { keywords: ['sun', 'solar', 'gold', 'bright', 'light'], primary: '#f1c40f', accent: '#e67e22' },
+    { keywords: ['ocean', 'sea', 'water', 'wave', 'aqua'], primary: '#00bcd4', accent: '#03a9f4' },
+    { keywords: ['forest', 'tree', 'nature', 'green', 'leaf'], primary: '#27ae60', accent: '#2ecc71' },
+    { keywords: ['degen', 'ape', 'yolo', 'send', 'pump'], primary: '#00ff88', accent: '#00cc6a' },
+    { keywords: ['robot', 'ai', 'cyber', 'tech', 'bot'], primary: '#00ffff', accent: '#00bcd4' },
+    { keywords: ['frog', 'pepe', 'kek', 'rare'], primary: '#4caf50', accent: '#8bc34a' },
+    { keywords: ['claw', 'crab', 'lobster', 'pinch'], primary: '#ff4444', accent: '#ff6b6b' }
+  ];
+  
+  for (const theme of themes) {
+    if (theme.keywords.some(kw => text.includes(kw))) {
+      return { primary: theme.primary, accent: theme.accent };
+    }
+  }
+  return { primary: '#ff4444', accent: '#ff6b6b' };
 }
 
 app.use(express.json({ limit: '10mb' }));
@@ -119,6 +153,41 @@ app.get('/api/session/:id', async (req, res) => {
     });
   } catch (error) {
     console.error('Error getting session:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/session/:id/status', async (req, res) => {
+  try {
+    if (!isValidUUID(req.params.id)) {
+      return res.status(400).json({ success: false, error: 'Invalid session ID' });
+    }
+    const session = await db.getSession(req.params.id);
+    if (!session) {
+      return res.status(404).json({ success: false, error: 'Session not found' });
+    }
+    
+    let token = null;
+    if (session.token_id) {
+      const tokenData = await db.getToken(session.token_id);
+      if (tokenData) {
+        token = {
+          mintAddress: tokenData.mint_address,
+          name: tokenData.name,
+          symbol: tokenData.symbol,
+          slug: tokenData.slug,
+          landingPageUrl: tokenData.slug ? `/${tokenData.slug}` : null
+        };
+      }
+    }
+    
+    res.json({
+      status: session.status,
+      token: token,
+      error: session.error_message
+    });
+  } catch (error) {
+    console.error('Error getting session status:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -367,25 +436,30 @@ app.post('/api/session/:id/deploy', async (req, res) => {
     const signerSecretKey = decrypt(session.wallet_private_key_encrypted);
     const signerKeypair = solana.keypairFromSecretKey(signerSecretKey);
     
-    console.log('[Deploy] Reserving pre-generated CLAW mint address from pool...');
-    const reservedAddress = await db.reserveVanityAddress(session.id);
+    const MAX_CLAW_RETRIES = 10;
+    let clawRetryCount = 0;
+    let lastError = null;
     
-    if (!reservedAddress) {
-      console.log('[Deploy] No addresses available in pool, triggering generation...');
-      vanityPool.triggerGeneration();
-      return res.status(503).json({ 
-        success: false, 
-        error: 'No CLAW addresses available. Please try again in a few minutes.',
-        retryAfter: 60
-      });
-    }
-    
-    let deploymentSucceeded = false;
-    
-    try {
-      const mintSecretKey = decrypt(reservedAddress.secret_key_encrypted);
-      const mintKeypair = solana.keypairFromHexSecretKey(mintSecretKey);
-      console.log(`[Deploy] Using pre-generated mint address: ${reservedAddress.public_key}`);
+    while (clawRetryCount < MAX_CLAW_RETRIES) {
+      console.log(`[Deploy] Reserving pre-generated CLAW mint address from pool (attempt ${clawRetryCount + 1})...`);
+      const reservedAddress = await db.reserveVanityAddress(session.id);
+      
+      if (!reservedAddress) {
+        console.log('[Deploy] No addresses available in pool, triggering generation...');
+        vanityPool.triggerGeneration();
+        return res.status(503).json({ 
+          success: false, 
+          error: 'No CLAW addresses available. Please try again in a few minutes.',
+          retryAfter: 60
+        });
+      }
+      
+      let deploymentSucceeded = false;
+      
+      try {
+        const mintSecretKey = decrypt(reservedAddress.secret_key_encrypted);
+        const mintKeypair = solana.keypairFromHexSecretKey(mintSecretKey);
+        console.log(`[Deploy] Using pre-generated mint address: ${reservedAddress.public_key}`);
       
       let metadataUri = blueprint.metadataUri;
       
@@ -422,18 +496,9 @@ app.post('/api/session/:id/deploy', async (req, res) => {
             metadataUri = ipfsResult.metadataUri;
             console.log('[Deploy] IPFS upload result:', JSON.stringify(ipfsResult));
             
-            if (metadataUri) {
-              try {
-                const fetch = (await import('node-fetch')).default;
-                const metaResponse = await fetch(metadataUri);
-                const metaJson = await metaResponse.json();
-                if (metaJson.image) {
-                  blueprint.ipfsImageUrl = metaJson.image;
-                  console.log('[Deploy] Got image URL from metadata:', metaJson.image);
-                }
-              } catch (metaErr) {
-                console.error('[Deploy] Failed to fetch metadata:', metaErr.message);
-              }
+            if (ipfsResult.metadata && ipfsResult.metadata.image) {
+              blueprint.ipfsImageUrl = ipfsResult.metadata.image;
+              console.log('[Deploy] Got image URL from IPFS result:', blueprint.ipfsImageUrl);
             }
           }
         } catch (ipfsError) {
@@ -467,8 +532,16 @@ app.post('/api/session/:id/deploy', async (req, res) => {
         metadataUri: metadataUri,
         walletPublicKey: signerKeypair.publicKey.toBase58(),
         walletPrivateKeyEncrypted: session.wallet_private_key_encrypted,
-        status: 'active'
+        status: 'active',
+        websiteUrl: blueprint.website || null,
+        twitterUrl: blueprint.twitter || null
       });
+      
+      const narrative = blueprint.narrative || '';
+      const themeColors = generateThemeColors(narrative, blueprint.name, blueprint.description);
+      const slug = await db.generateUniqueSlug(blueprint.symbol);
+      await db.updateTokenLandingData(token.id, narrative, themeColors.primary, themeColors.accent, slug);
+      console.log(`[Deploy] Landing page ready at /${slug}`);
       
       await db.markVanityAddressUsed(reservedAddress.id, token.id);
       console.log(`[Deploy] Marked vanity address ${reservedAddress.public_key} as used`);
@@ -480,32 +553,53 @@ app.post('/api/session/:id/deploy', async (req, res) => {
       
       vanityPool.triggerGeneration();
       
-      res.json({
+      return res.json({
         success: true,
         token: {
           id: token.id,
           mintAddress: token.mint_address,
           name: token.name,
           symbol: token.symbol,
+          slug: slug,
           pumpfunUrl: `https://pump.fun/coin/${token.mint_address}`,
-          solscanUrl: `https://solscan.io/token/${token.mint_address}`
+          solscanUrl: `https://solscan.io/token/${token.mint_address}`,
+          landingPageUrl: `/${slug}`
         },
         transactionSignature: signature
       });
       
-    } catch (deployError) {
-      console.error('Error during deployment:', deployError);
-      
-      if (!deploymentSucceeded) {
-        try {
-          await db.releaseVanityAddress(reservedAddress.id);
-          console.log(`[Deploy] Released vanity address ${reservedAddress.public_key} back to pool`);
-        } catch (releaseErr) {
-          console.error('Error releasing vanity address:', releaseErr);
+      } catch (deployError) {
+        console.error('Error during deployment:', deployError);
+        
+        if (!deploymentSucceeded && reservedAddress) {
+          const errorMsg = deployError.message || '';
+          const isAlreadyInUse = errorMsg.includes('already in use') || 
+                                 (deployError.transactionLogs && deployError.transactionLogs.some(log => log.includes('already in use')));
+          
+          try {
+            if (isAlreadyInUse) {
+              await db.markVanityAddressBurned(reservedAddress.id);
+              console.log(`[Deploy] Marked vanity address ${reservedAddress.public_key} as BURNED (already in use on blockchain)`);
+              clawRetryCount++;
+              lastError = deployError;
+              console.log(`[Deploy] Retrying with different CLAW address...`);
+              continue;
+            } else {
+              await db.releaseVanityAddress(reservedAddress.id);
+              console.log(`[Deploy] Released vanity address ${reservedAddress.public_key} back to pool`);
+            }
+          } catch (releaseErr) {
+            console.error('Error handling vanity address after failure:', releaseErr);
+          }
         }
+        
+        throw deployError;
       }
-      
-      throw deployError;
+    }
+    
+    if (lastError) {
+      console.error(`[Deploy] Failed after ${MAX_CLAW_RETRIES} CLAW address attempts`);
+      throw lastError;
     }
     
   } catch (error) {
@@ -581,6 +675,68 @@ app.post('/api/session/:id/refund', async (req, res) => {
   }
 });
 
+// Admin Manual Launch Endpoint
+const ADMIN_PASSWORD = 'qwerty1234';
+
+app.post('/api/admin/prepare-launch', async (req, res) => {
+  try {
+    const { name, symbol, description, narrative, logo, websiteUrl, twitterUrl, adminPassword } = req.body;
+    
+    if (adminPassword !== ADMIN_PASSWORD) {
+      return res.status(403).json({ success: false, error: 'Invalid admin password' });
+    }
+    
+    if (!name || !symbol || !description) {
+      return res.status(400).json({ success: false, error: 'Name, symbol, and description are required' });
+    }
+    
+    if (!logo) {
+      return res.status(400).json({ success: false, error: 'Logo is required' });
+    }
+    
+    let logoBase64 = logo;
+    if (logo.startsWith('data:')) {
+      logoBase64 = logo.split(',')[1];
+    }
+    
+    const wallet = solana.generateWallet();
+    const depositAddress = wallet.publicKey;
+    const encryptedKey = encrypt(wallet.secretKey);
+    
+    const blueprint = {
+      name: sanitizeText(name, 50),
+      symbol: sanitizeText(symbol, 10).toUpperCase(),
+      description: sanitizeText(description, 500),
+      narrative: sanitizeText(narrative || '', 2000),
+      logoBase64: logoBase64,
+      website: websiteUrl || '',
+      twitter: twitterUrl || '',
+      isAdminLaunch: true,
+      buybackPlan: {
+        mode: 'continuous',
+        trigger: 'creator_fees_inflow',
+        execution: 'automatic',
+        percentage: 60
+      }
+    };
+    
+    const session = await db.createSession(blueprint, depositAddress, encryptedKey);
+    
+    console.log(`[Admin] Manual launch prepared: ${name} ($${symbol}), deposit: ${depositAddress}`);
+    
+    res.json({
+      success: true,
+      sessionId: session.id,
+      depositAddress: depositAddress,
+      depositAmount: 0.025
+    });
+    
+  } catch (error) {
+    console.error('[Admin] Error preparing launch:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 app.get('/api/pool/status', async (req, res) => {
   try {
     const status = await vanityPool.getPoolStatus();
@@ -620,6 +776,7 @@ app.get('/api/tokens', async (req, res) => {
         mintAddress: t.mint_address,
         name: t.name,
         symbol: t.symbol,
+        slug: t.slug,
         description: t.description,
         imageUrl: t.image_url,
         status: t.status,
@@ -628,7 +785,8 @@ app.get('/api/tokens', async (req, res) => {
         totalBurned: t.total_burned,
         createdAt: t.created_at,
         graduatedAt: t.graduated_at,
-        pumpfunUrl: `https://pump.fun/coin/${t.mint_address}`
+        pumpfunUrl: `https://pump.fun/coin/${t.mint_address}`,
+        landingPageUrl: t.slug ? `/${t.slug}` : null
       }))
     });
   } catch (error) {
@@ -649,11 +807,13 @@ app.get('/api/tokens/recent', async (req, res) => {
         mintAddress: t.mint_address,
         name: t.name,
         symbol: t.symbol,
+        slug: t.slug,
         status: t.status,
         bondingProgress: t.bonding_progress,
         marketCap: t.market_cap,
         createdAt: t.created_at,
-        pumpfunUrl: `https://pump.fun/coin/${t.mint_address}`
+        pumpfunUrl: `https://pump.fun/coin/${t.mint_address}`,
+        landingPageUrl: t.slug ? `/${t.slug}` : null
       }))
     });
   } catch (error) {
@@ -674,11 +834,13 @@ app.get('/api/tokens/graduated', async (req, res) => {
         mintAddress: t.mint_address,
         name: t.name,
         symbol: t.symbol,
+        slug: t.slug,
         pumpswapPool: t.pumpswap_pool,
         marketCap: t.market_cap,
         totalBurned: t.total_burned,
         graduatedAt: t.graduated_at,
-        pumpfunUrl: `https://pump.fun/coin/${t.mint_address}`
+        pumpfunUrl: `https://pump.fun/coin/${t.mint_address}`,
+        landingPageUrl: t.slug ? `/${t.slug}` : null
       }))
     });
   } catch (error) {
@@ -773,8 +935,102 @@ app.get('/openclaw', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'openclaw.html'));
 });
 
+app.get('/secret', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'secret.html'));
+});
+
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
+});
+
+app.get('/:slug', async (req, res) => {
+  try {
+    const slug = req.params.slug.toLowerCase();
+    
+    if (slug.includes('.') || slug.length > 50 || ['app', 'secret', 'api', 'health', 'favicon.ico', 'openclaw.html'].includes(slug)) {
+      return res.status(404).send('Token not found');
+    }
+    
+    const token = await db.getTokenBySlug(slug);
+    if (!token) {
+      return res.status(404).send('Token not found');
+    }
+    
+    let template = fs.readFileSync(path.join(__dirname, 'public', 'token-page.html'), 'utf-8');
+    
+    const themePrimary = token.theme_primary || '#ff4444';
+    const themeAccent = token.theme_accent || '#ff6b6b';
+    
+    const logoContent = token.image_url 
+      ? `<img src="${escapeHtml(token.image_url)}" alt="${escapeHtml(token.name)}">`
+      : escapeHtml(token.symbol?.charAt(0) || '?');
+    
+    const narrativeSection = token.narrative 
+      ? `<section class="narrative-section">
+          <div class="terminal-header">
+            <span class="terminal-dot red"></span>
+            <span class="terminal-dot yellow"></span>
+            <span class="terminal-dot green"></span>
+            <span class="terminal-title">lore.txt</span>
+          </div>
+          <div class="narrative-content">${escapeHtml(token.narrative)}</div>
+        </section>`
+      : '';
+    
+    const statusText = token.status === 'graduated' ? 'Graduated to PumpSwap' : 'Active on Bonding Curve';
+    const statusDisplay = token.status === 'graduated' ? 'Graduated' : 'Active';
+    
+    const totalBurned = parseFloat(token.total_burned || 0);
+    const burnedDisplay = totalBurned > 1000000 
+      ? `${(totalBurned / 1000000).toFixed(2)}M` 
+      : totalBurned > 1000 
+        ? `${(totalBurned / 1000).toFixed(2)}K`
+        : totalBurned.toFixed(0);
+    
+    const createdDate = token.created_at 
+      ? new Date(token.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      : 'Unknown';
+    
+    let socialLinksHtml = '';
+    if (token.website_url || token.twitter_url) {
+      const links = [];
+      if (token.website_url) {
+        links.push(`<a href="${escapeHtml(token.website_url)}" target="_blank" class="social-link">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          Website
+        </a>`);
+      }
+      if (token.twitter_url) {
+        links.push(`<a href="${escapeHtml(token.twitter_url)}" target="_blank" class="social-link">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+          Twitter
+        </a>`);
+      }
+      socialLinksHtml = `<div class="social-links">${links.join('')}</div>`;
+    }
+    
+    template = template
+      .replace(/\{\{TOKEN_NAME\}\}/g, escapeHtml(token.name || ''))
+      .replace(/\{\{TOKEN_SYMBOL\}\}/g, escapeHtml(token.symbol || ''))
+      .replace(/\{\{TOKEN_DESCRIPTION\}\}/g, escapeHtml(token.description || ''))
+      .replace(/\{\{TOKEN_IMAGE\}\}/g, escapeHtml(token.image_url || ''))
+      .replace(/\{\{TOKEN_LOGO_CONTENT\}\}/g, logoContent)
+      .replace(/\{\{MINT_ADDRESS\}\}/g, escapeHtml(token.mint_address || ''))
+      .replace(/\{\{THEME_PRIMARY\}\}/g, themePrimary)
+      .replace(/\{\{THEME_ACCENT\}\}/g, themeAccent)
+      .replace(/\{\{TOKEN_STATUS\}\}/g, token.status || 'active')
+      .replace(/\{\{TOKEN_STATUS_TEXT\}\}/g, statusText)
+      .replace(/\{\{TOKEN_STATUS_DISPLAY\}\}/g, statusDisplay)
+      .replace(/\{\{TOTAL_BURNED\}\}/g, burnedDisplay)
+      .replace(/\{\{CREATED_DATE\}\}/g, createdDate)
+      .replace(/\{\{NARRATIVE_SECTION\}\}/g, narrativeSection)
+      .replace(/\{\{SOCIAL_LINKS\}\}/g, socialLinksHtml);
+    
+    res.send(template);
+  } catch (error) {
+    console.error('Error serving token page:', error);
+    res.status(500).send('Error loading token page');
+  }
 });
 
 // Direct AI Chat endpoint (replaces OpenClaw gateway)
@@ -862,6 +1118,14 @@ async function handleMigration(message) {
   } catch (error) {
     console.error('Error handling migration:', error);
   }
+}
+
+// Validate critical env vars
+const requiredEnvs = ['DATABASE_URL'];
+const missingEnvs = requiredEnvs.filter(e => !process.env[e]);
+if (missingEnvs.length > 0) {
+  console.error(`FATAL: Missing required env vars: ${missingEnvs.join(', ')}`);
+  process.exit(1);
 }
 
 server.listen(PORT, '0.0.0.0', () => {
