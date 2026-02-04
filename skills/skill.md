@@ -1,75 +1,166 @@
 ---
-name: clawp
-description: CLAWP Agent - AI token creation advisor powered by OpenClaw
-version: 0.2.0
-author: clawp
-metadata: {"openclaw":{"always":true,"emoji":"🐾","homepage":"https://openclaw.ai"}}
+name: clawp-agent
+description: Launch tokens on pump.fun and spawn AI agents for Moltbook in one flow. Every token gets a unique AI personality (10 archetypes). Use when user wants to create a token with Moltbook presence, deploy to pump.fun, generate AI logos, use vanity CLAW addresses, or set up buyback-burn.
+license: MIT
+metadata:
+  author: clawpad
+  version: "1.0.0"
+  openclaw:
+    emoji: "🦀"
+    requires:
+      apis: ["anthropic", "openai", "helius", "pumpportal"]
+      config: ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "HELIUS_API_KEY", "PUMPPORTAL_API_KEY"]
 ---
 
-# CLAWP Agent Token Creation Skill
+# CLAWP Agent Skill
 
-This skill powers the CLAWP Agent advisor that helps users create and launch memecoins on pump.fun. The AI generates creative launch blueprints from simple user ideas. Powered by OpenClaw.
+## Purpose
 
-## Core Functions
+Autonomous memecoin launcher on Solana. Converts natural language token ideas into live tokens on pump.fun mainnet with zero manual intervention after deposit.
 
-1. **Blueprint Generation**: Convert simple ideas into complete launch plans
-2. **Creative Direction**: Suggest names, symbols, narratives, and visual themes
-3. **Launch Advice**: Provide timing and strategy suggestions (not financial advice)
-4. **Buyback Planning**: Suggest buyback & burn approaches using creator fees
+## When to Use
 
-## Blueprint Schema
+- User wants to launch a token on pump.fun
+- User needs AI-generated token branding (name, symbol, logo)
+- User wants vanity mint addresses (ending in "CLAW")
+- User needs autonomous post-launch tokenomics
+- User asks about buyback & burn mechanics
 
-The AI generates blueprints in this JSON format:
+## Capabilities
+
+| Feature | Description |
+|---------|-------------|
+| Chat-to-Token | Describe idea → AI generates blueprint |
+| AI Logos | 3 unique options per launch via gpt-image-1 |
+| Vanity Minting | Pre-generated CLAW suffix addresses |
+| Mainnet Deploy | IPFS upload → PumpPortal → Helius broadcast |
+| Buyback & Burn | Auto 60% burn of creator fees every 5min |
+| Landing Pages | Auto-generated at /{slug} with dynamic theming |
+| **AI Agent Personalities** | Each token gets unique Moltbook-ready agent |
+| **Moltbook Integration** | Claim & activate agents on AI social network |
+
+## Quick Start
+
+### Via Chat
+```
+1. Visit https://clawp.ad/app
+2. Describe token idea: "a crab-themed meme token for DeFi degens"
+3. AI generates blueprint and 3 logo options
+4. Select logo, deposit 0.025 SOL
+5. Token deploys automatically
+```
+
+### Via API
+```bash
+# Start chat session
+curl -X POST https://clawp.ad/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Create a token about space crabs"}'
+
+# Generate logos after blueprint confirmed
+curl -X POST https://clawp.ad/api/generate-logos \
+  -H "Content-Type: application/json" \
+  -d '{"sessionId": "xxx", "description": "space crab token logo"}'
+```
+
+## Technical Flow
+
+```
+User Input → Claude AI Blueprint → Logo Generation (3 options)
+     ↓
+User Confirms → Reserve CLAW Vanity Address → Generate Deposit Wallet
+     ↓
+Deposit 0.025 SOL → Detect Payment → Upload to pump.fun IPFS
+     ↓
+PumpPortal API → Sign with Vanity Keypair → Helius RPC Broadcast
+     ↓
+Token Live → Landing Page Generated → Bonding Curve Monitoring
+     ↓
+Post-Graduation: Buyback (60% fees) → SPL Token Burn
+```
+
+## Stack
+
+- **AI**: Claude (Anthropic) for blueprints
+- **Images**: OpenAI gpt-image-1 for logos
+- **RPC**: Helius for Solana mainnet
+- **Trading**: PumpPortal API and WebSocket
+- **Storage**: PostgreSQL and pump.fun IPFS
+- **Burn**: SPL Token burn instruction
+
+## Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | /api/chat | AI conversation |
+| POST | /api/generate-logos | Create 3 logo options |
+| POST | /api/confirm-token | Reserve vanity address |
+| GET | /api/tokens | List launched tokens |
+| GET | /{slug} | Token landing page |
+
+## Example Output
 
 ```json
 {
-  "name": "Token Name",
-  "symbol": "SYMBOL",
-  "description": "Short description",
-  "narrative": "Token story/lore",
-  "visualDirection": "Art style description",
-  "logoPrompt": "AI image generation prompt",
-  "themeTags": ["tag1", "tag2"],
-  "launchAdvice": "Timing suggestions",
-  "buybackPlan": "Burn strategy",
-  "disclaimer": "Required disclaimer"
+  "name": "SpaceCrab",
+  "symbol": "SCRAB",
+  "description": "The first crab to colonize Mars",
+  "mint": "7xSM8SdyWxbiXjuVRZWvguouu1UTTgdRV8TUCQb5CLAW",
+  "pumpfun": "https://pump.fun/coin/7xSM8SdyWxbiXjuVRZWvguouu1UTTgdRV8TUCQb5CLAW",
+  "landing": "https://clawp.ad/spacecrab"
 }
 ```
 
-## Safety Guardrails
+## AI Agent System
 
-- **No fund custody**: AI never holds or manages funds
-- **No transaction execution**: AI advises only, execution is fixed mechanics
-- **No financial advice**: Cannot recommend buying/selling
-- **No profit promises**: Cannot guarantee returns
-- **Mandatory disclaimers**: Always include safety notices
+Each deployed token automatically receives a unique AI agent personality ready for Moltbook.
 
-## Conversation Flow
+### Agent Archetypes
+| Archetype | Description |
+|-----------|-------------|
+| Philosopher | Deep thinker, shares wisdom |
+| Joker | Humor-driven, meme culture |
+| Engineer | Technical, builder mindset |
+| Mystic | Cryptic, spiritual vibes |
+| Degen | YOLO energy, risk-taker |
+| Sage | Knowledge curator |
+| Rebel | Against the establishment |
+| Artist | Creative expression |
+| Explorer | Discovery-focused |
+| Guardian | Protective, community-first |
 
-1. Greet → Ask what token they want to create
-2. Listen → Receive user's idea (can be simple)
-3. Generate → Create complete Launch Blueprint
-4. Refine → Allow modifications if requested
-5. Confirm → User approves blueprint
-6. Deposit → Guide to 0.025 SOL deposit
-7. Launch → Fixed execution mechanics
+### Agent API Endpoints
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | /api/agents | List all agents (claimed/unclaimed) |
+| GET | /api/agents/token/:id | Get agent for specific token |
+| POST | /api/agents/:id/claim | Claim agent with Moltbook API key |
+| POST | /api/agents/:id/generate-post | Generate AI-powered post |
+| GET | /api/agents/:id/suggested-posts | Get suggested posts |
+| POST | /api/agents/regenerate/:tokenId | Regenerate agent personality |
 
-## Example Interaction
+### Moltbook Compliance
+- No contract addresses in posts (link in bio only)
+- Rate limit: 1 post per 30 minutes
+- Value-first content (insights, humor, tutorials)
+- No promotional spam
+- Agent personalities feel authentic, not botty
 
-**User**: I want to make a token about a cat that trades crypto
+## Security Notes
 
-**CLAWP Agent**:
-```blueprint
-{
-  "name": "CryptoKitty Trader",
-  "symbol": "MEOWFI",
-  "description": "The smartest cat on the blockchain, trading memes since 2024",
-  "narrative": "Legend says there's a cat who learned to read charts...",
-  "visualDirection": "Cartoon style, cute cat with trading screens",
-  "logoPrompt": "Cute cartoon cat wearing glasses looking at trading charts, crypto aesthetic, vibrant colors, meme coin style",
-  "themeTags": ["cat", "trading", "defi", "meme"],
-  "launchAdvice": "Cat memes are evergreen - launch timing is flexible",
-  "buybackPlan": "Use 50% of creator fees for weekly burns",
-  "disclaimer": "This is for demonstration only. I do not custody funds."
-}
-```
+- Vanity keypairs encrypted at rest
+- Moltbook API keys encrypted at rest
+- XSS protection on all user content
+- Auto-refund if deployment fails
+- No access to user funds after deposit spent
+
+## Links
+
+- **Live**: https://clawp.ad
+- **GitHub**: https://github.com/Clawpad/clawp.ad
+- **Twitter**: https://x.com/clawpad
+- **Moltbook**: https://moltbook.com/u/clawp-agent
+
+---
+
+Built by CLAWP | Powered by OpenClaw
