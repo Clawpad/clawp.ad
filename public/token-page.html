@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{TOKEN_NAME}} (${{TOKEN_SYMBOL}}) - ClawPad</title>
+    <meta name="description" content="{{TOKEN_DESCRIPTION}}">
+    <meta property="og:title" content="{{TOKEN_NAME}} (${{TOKEN_SYMBOL}})">
+    <meta property="og:description" content="{{TOKEN_DESCRIPTION}}">
+    <meta property="og:image" content="{{TOKEN_IMAGE}}">
+    <link rel="icon" type="image/png" href="/logo.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-tertiary: #1a1a24;
+            --text-primary: #ffffff;
+            --text-secondary: #8888aa;
+            --theme-primary: {{THEME_PRIMARY}};
+            --theme-accent: {{THEME_ACCENT}};
+            --success: #00ff88;
+            --border-color: rgba(255, 255, 255, 0.08);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 0 24px;
+        }
+
+        .hero {
+            text-align: center;
+            padding: 80px 0 60px;
+            position: relative;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 600px;
+            height: 400px;
+            background: radial-gradient(ellipse at center, var(--theme-primary) 0%, transparent 70%);
+            opacity: 0.15;
+            pointer-events: none;
+        }
+
+        .token-logo {
+            width: 160px;
+            height: 160px;
+            border-radius: 32px;
+            margin: 0 auto 32px;
+            background: var(--bg-secondary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 3rem;
+            font-weight: 700;
+            color: var(--theme-primary);
+            border: 3px solid var(--theme-primary);
+            box-shadow: 0 0 60px rgba(255, 68, 68, 0.3);
+            animation: logoFloat 3s ease-in-out infinite;
+            overflow: hidden;
+        }
+
+        .token-logo img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        @keyframes logoFloat {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .token-name {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 3rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, #fff 0%, var(--theme-primary) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .token-symbol {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.5rem;
+            color: var(--theme-primary);
+            margin-bottom: 16px;
+        }
+
+        .token-description {
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+            max-width: 600px;
+            margin: 0 auto 32px;
+            line-height: 1.7;
+        }
+
+        .cta-buttons {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .social-links {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .social-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 20px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+
+        .social-link:hover {
+            border-color: var(--theme-primary);
+            background: rgba(255, 68, 68, 0.1);
+        }
+
+        .social-link svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 16px 32px;
+            border-radius: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+            border: none;
+            font-size: 1rem;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--theme-primary), var(--theme-accent));
+            color: white;
+            box-shadow: 0 4px 24px rgba(255, 68, 68, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 32px rgba(255, 68, 68, 0.4);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-secondary:hover {
+            background: var(--bg-secondary);
+            border-color: var(--theme-primary);
+        }
+
+        .narrative-section {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 32px;
+            margin-bottom: 32px;
+        }
+
+        .terminal-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 16px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .terminal-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .terminal-dot.red { background: #ff5f56; }
+        .terminal-dot.yellow { background: #ffbd2e; }
+        .terminal-dot.green { background: #27c93f; }
+
+        .terminal-title {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-left: 12px;
+        }
+
+        .narrative-content {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.95rem;
+            color: var(--success);
+            line-height: 1.8;
+        }
+
+        .narrative-content::before {
+            content: '> ';
+            color: var(--theme-primary);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .stat-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 24px;
+            text-align: center;
+        }
+
+        .stat-icon {
+            font-size: 1.5rem;
+            margin-bottom: 8px;
+        }
+
+        .stat-label {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+        }
+
+        .stat-value {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--theme-primary);
+        }
+
+        .contract-section {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 32px;
+        }
+
+        .contract-label {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .contract-address {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: var(--bg-primary);
+            border-radius: 8px;
+            padding: 12px 16px;
+        }
+
+        .contract-text {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            flex: 1;
+            word-break: break-all;
+        }
+
+        .contract-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .contract-btn {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+
+        .contract-btn:hover {
+            border-color: var(--theme-primary);
+            color: var(--theme-primary);
+        }
+
+        footer {
+            text-align: center;
+            padding: 48px 0;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .footer-brand {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .footer-logo {
+            width: 32px;
+            height: 32px;
+        }
+
+        .footer-text {
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+
+        .footer-links {
+            display: flex;
+            gap: 24px;
+            justify-content: center;
+        }
+
+        .footer-link {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: color 0.2s;
+        }
+
+        .footer-link:hover {
+            color: var(--theme-primary);
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            margin-bottom: 24px;
+        }
+
+        .status-badge.active {
+            background: rgba(0, 255, 136, 0.1);
+            color: var(--success);
+            border: 1px solid rgba(0, 255, 136, 0.3);
+        }
+
+        .status-badge.graduated {
+            background: rgba(255, 170, 0, 0.1);
+            color: #ffaa00;
+            border: 1px solid rgba(255, 170, 0, 0.3);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: currentColor;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        @media (max-width: 768px) {
+            .token-name { font-size: 2rem; }
+            .token-symbol { font-size: 1.2rem; }
+            .token-logo { width: 120px; height: 120px; }
+            .cta-buttons { flex-direction: column; }
+            .btn { width: 100%; justify-content: center; }
+            .contract-address { flex-direction: column; align-items: stretch; }
+            .contract-actions { justify-content: center; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <section class="hero">
+            <div class="token-logo" id="tokenLogo">
+                {{TOKEN_LOGO_CONTENT}}
+            </div>
+            <h1 class="token-name">{{TOKEN_NAME}}</h1>
+            <p class="token-symbol">${{TOKEN_SYMBOL}}</p>
+            <div class="status-badge {{TOKEN_STATUS}}">
+                <span class="status-dot"></span>
+                {{TOKEN_STATUS_TEXT}}
+            </div>
+            <p class="token-description">{{TOKEN_DESCRIPTION}}</p>
+            <div class="cta-buttons">
+                <a href="https://pump.fun/coin/{{MINT_ADDRESS}}" target="_blank" class="btn btn-primary">
+                    Buy on pump.fun
+                </a>
+                <a href="https://dexscreener.com/solana/{{MINT_ADDRESS}}" target="_blank" class="btn btn-secondary">
+                    View Chart
+                </a>
+            </div>
+            {{SOCIAL_LINKS}}
+        </section>
+
+        {{NARRATIVE_SECTION}}
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon">🔥</div>
+                <div class="stat-label">Total Burned</div>
+                <div class="stat-value">{{TOTAL_BURNED}}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">📊</div>
+                <div class="stat-label">Status</div>
+                <div class="stat-value">{{TOKEN_STATUS_DISPLAY}}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">📅</div>
+                <div class="stat-label">Launched</div>
+                <div class="stat-value">{{CREATED_DATE}}</div>
+            </div>
+        </div>
+
+        <div class="contract-section">
+            <div class="contract-label">Contract Address</div>
+            <div class="contract-address">
+                <span class="contract-text" id="contractAddress">{{MINT_ADDRESS}}</span>
+                <div class="contract-actions">
+                    <button class="contract-btn" onclick="copyContract()">Copy</button>
+                    <a href="https://solscan.io/token/{{MINT_ADDRESS}}" target="_blank" class="contract-btn">View</a>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <div class="footer-brand">
+                <img src="/logo.png" alt="ClawPad" class="footer-logo">
+                <span class="footer-text">Launched on ClawPad</span>
+            </div>
+            <div class="footer-links">
+                <a href="/" class="footer-link">Home</a>
+                <a href="/app" class="footer-link">Launch Token</a>
+                <a href="/docs" class="footer-link">Docs</a>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        function copyContract() {
+            const address = document.getElementById('contractAddress').textContent;
+            navigator.clipboard.writeText(address).then(() => {
+                alert('Contract address copied!');
+            });
+        }
+    </script>
+</body>
+</html>
