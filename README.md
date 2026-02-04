@@ -149,11 +149,11 @@ CLAWP Agent is an AI-powered autonomous token launcher on pump.fun, powered by O
 .
 ├── .openclaw/
 │   └── openclaw.json     # OpenClaw gateway configuration
-├── skills/               # ClawPad AI skill
 ├── public/
 │   ├── index.html        # Landing page (+ real-time data)
 │   ├── app.html          # App platform
 │   └── *.html            # Other pages
+├── skills/               # ClawPad AI skill
 ├── src/
 │   ├── db.mjs            # Database connection & queries
 │   ├── solana.mjs        # Solana/Helius utilities
