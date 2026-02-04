@@ -329,6 +329,159 @@ export async function getAvailableVanityCount() {
   return parseInt(result.rows[0].count) || 0;
 }
 
+// Agent Skills functions
+export async function createAgentSkill(tokenId, data) {
+  const result = await query(
+    `INSERT INTO agent_skills (token_id, archetype, voice, topics, quirks, sample_posts, intro_post)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING *`,
+    [
+      tokenId,
+      data.archetype,
+      data.voice,
+      JSON.stringify(data.topics || []),
+      JSON.stringify(data.quirks || []),
+      JSON.stringify(data.samplePosts || []),
+      data.introPost || null
+    ]
+  );
+  return result.rows[0];
+}
+
+export async function getAgentSkillByTokenId(tokenId) {
+  const result = await query(
+    `SELECT * FROM agent_skills WHERE token_id = $1`,
+    [tokenId]
+  );
+  return result.rows[0];
+}
+
+export async function getAgentSkill(id) {
+  const result = await query(
+    `SELECT * FROM agent_skills WHERE id = $1`,
+    [id]
+  );
+  return result.rows[0];
+}
+
+export async function updateAgentSkillClaim(id, apiKeyEncrypted, username, agentId) {
+  const result = await query(
+    `UPDATE agent_skills 
+     SET moltbook_api_key_encrypted = $1, moltbook_username = $2, moltbook_agent_id = $3, 
+         status = 'claimed', claimed_at = NOW(), updated_at = NOW()
+     WHERE id = $4 RETURNING *`,
+    [apiKeyEncrypted, username, agentId, id]
+  );
+  return result.rows[0];
+}
+
+export async function updateAgentSkillStatus(id, status) {
+  const result = await query(
+    `UPDATE agent_skills SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
+    [status, id]
+  );
+  return result.rows[0];
+}
+
+export async function updateAgentSkillKarma(id, karma, postsCount, commentsCount) {
+  const result = await query(
+    `UPDATE agent_skills 
+     SET karma = $1, posts_count = $2, comments_count = $3, updated_at = NOW() 
+     WHERE id = $4 RETURNING *`,
+    [karma, postsCount, commentsCount, id]
+  );
+  return result.rows[0];
+}
+
+export async function getUnclaimedAgentSkills(limit = 50) {
+  const result = await query(
+    `SELECT s.*, t.name as token_name, t.symbol, t.image_url, t.slug
+     FROM agent_skills s
+     JOIN tokens t ON s.token_id = t.id
+     WHERE s.status = 'unclaimed'
+     ORDER BY s.created_at DESC LIMIT $1`,
+    [limit]
+  );
+  return result.rows;
+}
+
+export async function getClaimedAgentSkills(limit = 50) {
+  const result = await query(
+    `SELECT s.*, t.name as token_name, t.symbol, t.image_url, t.slug
+     FROM agent_skills s
+     JOIN tokens t ON s.token_id = t.id
+     WHERE s.status IN ('claimed', 'active')
+     ORDER BY s.karma DESC, s.created_at DESC LIMIT $1`,
+    [limit]
+  );
+  return result.rows;
+}
+
+// Agent Posts functions
+export async function createAgentPost(agentSkillId, content) {
+  const result = await query(
+    `INSERT INTO agent_posts (agent_skill_id, content, status)
+     VALUES ($1, $2, 'suggested')
+     RETURNING *`,
+    [agentSkillId, content]
+  );
+  return result.rows[0];
+}
+
+export async function getAgentPosts(agentSkillId, limit = 20) {
+  const result = await query(
+    `SELECT * FROM agent_posts 
+     WHERE agent_skill_id = $1 
+     ORDER BY created_at DESC LIMIT $2`,
+    [agentSkillId, limit]
+  );
+  return result.rows;
+}
+
+export async function getSuggestedPosts(agentSkillId, limit = 5) {
+  const result = await query(
+    `SELECT * FROM agent_posts 
+     WHERE agent_skill_id = $1 AND status = 'suggested'
+     ORDER BY created_at DESC LIMIT $2`,
+    [agentSkillId, limit]
+  );
+  return result.rows;
+}
+
+export async function updateAgentPostStatus(id, status, moltbookPostId = null, moltbookPostUrl = null) {
+  const result = await query(
+    `UPDATE agent_posts 
+     SET status = $1, moltbook_post_id = COALESCE($2, moltbook_post_id), 
+         moltbook_post_url = COALESCE($3, moltbook_post_url),
+         posted_at = CASE WHEN $1 = 'posted' THEN NOW() ELSE posted_at END
+     WHERE id = $4 RETURNING *`,
+    [status, moltbookPostId, moltbookPostUrl, id]
+  );
+  return result.rows[0];
+}
+
+export async function markAgentLastPost(agentSkillId) {
+  const result = await query(
+    `UPDATE agent_skills 
+     SET last_post_at = NOW(), posts_count = posts_count + 1, updated_at = NOW()
+     WHERE id = $1 RETURNING *`,
+    [agentSkillId]
+  );
+  return result.rows[0];
+}
+
+export async function getAgentPostStats() {
+  const result = await query(
+    `SELECT 
+      COUNT(*) FILTER (WHERE status = 'suggested') as suggested,
+      COUNT(*) FILTER (WHERE status = 'posted') as posted,
+      COUNT(*) FILTER (WHERE status = 'rejected') as rejected,
+      COUNT(*) as total
+     FROM agent_posts`
+  );
+  return result.rows[0];
+}
+
 export default {
   query,
   createSession,
@@ -361,5 +514,19 @@ export default {
   releaseVanityAddress,
   markVanityAddressBurned,
   getVanityPoolStats,
-  getAvailableVanityCount
+  getAvailableVanityCount,
+  createAgentSkill,
+  getAgentSkillByTokenId,
+  getAgentSkill,
+  updateAgentSkillClaim,
+  updateAgentSkillStatus,
+  updateAgentSkillKarma,
+  getUnclaimedAgentSkills,
+  getClaimedAgentSkills,
+  createAgentPost,
+  getAgentPosts,
+  getSuggestedPosts,
+  updateAgentPostStatus,
+  markAgentLastPost,
+  getAgentPostStats
 };
