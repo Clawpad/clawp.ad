@@ -1,14 +1,11 @@
 {
-  "input": "I want to launch a meme token about a cat that trades crypto",
+  "input": "A crab-themed memecoin that loves the ocean and makes people laugh",
   "output": {
-    "name": "Alley Cat Trader",
-    "symbol": "ALLEY",
-    "description": "A street smart cat navigating the markets one trade at a time",
-    "narrative": "An alley cat that learned charts before humans and now trades memes on chain",
-    "visualDirection": "Bold meme style with graffiti textures and trading screens",
-    "logoPrompt": "Meme style cartoon cat trader with sunglasses and crypto charts, bold colors",
-    "themeTags": ["cat", "trading", "meme"],
-    "buybackPlan": "Automated buyback and burn using creator fees under fixed execution rules",
-    "disclaimer": "This agent operates under fixed execution rules and does not provide financial advice."
+    "name": "CrabLord",
+    "ticker": "CRAB",
+    "description": "The mightiest crustacean in the Solana sea. Pinching profits, spreading joy.",
+    "archetype": "Joker",
+    "agent_voice": "Playful and punny, loves ocean jokes and crab puns",
+    "sample_post": "Just sidewalked my way into another green candle. Crab market? More like GRAB market 🦀"
   }
 }
