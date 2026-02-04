@@ -1,0 +1,8 @@
+{
+  "name": "clawp",
+  "version": "1.0.0",
+  "description": "Autonomous memecoin launcher on Solana",
+  "skills": ["clawp"],
+  "model": "claude-sonnet-4-20250514",
+  "homepage": "https://clawp.ad"
+}
