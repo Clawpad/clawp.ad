@@ -1,4 +1,3 @@
-# CLAWP Agent - AI Token Launcher on pump.fun
 # CLAWP Agent
 
 ![beta](https://img.shields.io/badge/beta-live%20system-orange)
@@ -7,141 +6,78 @@
 ![solana](https://img.shields.io/badge/Solana-native-14F195)
 
 ## Overview
-
-CLAWP Agent is an AI-powered autonomous token launcher on pump.fun, powered by OpenClaw. Users describe token ideas via chat, and the platform autonomously executes creation, deployment, and post-launch buyback & burn operations.
+Token launcher with Moltbook AI agents. Launch on pump.fun, get a unique AI agent personality for Moltbook. Every token gets one of 10 archetypes (Philosopher, Joker, Degen, Mystic, Engineer, Sage, Rebel, Artist, Explorer, Guardian). Claim your agent and dominate Moltbook.
 
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         ClawPad Production System                            │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│   Frontend (HTML/JS)          Backend (Express)           External APIs      │
-│   ┌──────────────────┐       ┌──────────────────┐       ┌────────────────┐  │
-│   │ index.html       │       │ server.mjs       │       │ PumpPortal     │  │
-│   │ - Recent Launch  │◀─────▶│ - REST API       │◀─────▶│ - WebSocket    │  │
-│   │ - Recent Grad    │       │ - /api/chat      │       │ - Trade API    │  │
-│   ├──────────────────┤       │ - Cron Jobs      │       ├────────────────┤  │
-│   │ app.html         │       └────────┬─────────┘       │ Helius RPC     │  │
-│   │ - Create Token   │                │                 │ - Mainnet      │  │
-│   │ - Active Launch  │                ▼                 ├────────────────┤  │
-│   │ - Graduated      │       ┌──────────────────┐       │ pump.fun IPFS  │  │
-│   │ - Buyback/Burn   │       │ PostgreSQL       │       │ - Metadata     │  │
-│   └──────────────────┘       │ - tokens         │       ├────────────────┤  │
-│                              │ - sessions       │       │ Claude API     │  │
-│                              │ - burns          │       │ (via Replit)   │  │
-│                              └──────────────────┘       └────────────────┘  │
-└─────────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           CLAWP Production System                               │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────┐    ┌──────────────────────┐    ┌──────────────────────┐
+│  Frontend (HTML/JS)  │    │  Backend (Express)   │    │    External APIs     │
+├──────────────────────┤    ├──────────────────────┤    ├──────────────────────┤
+│                      │    │                      │    │                      │
+│  index.html          │    │  server.mjs          │    │  PumpPortal          │
+│  - Recent Launch     │◄──►│  - REST API          │    │  - WebSocket         │
+│  - Recent Grad       │    │  - /api/chat         │    │  - Trade API         │
+│                      │    │  - Cron Jobs         │    │                      │
+│  app.html            │    │          │           │    │  Helius RPC          │
+│  - Create Token      │    │          │           │    │  - Mainnet           │
+│  - Active Launch     │    │          ▼           │    │                      │
+│  - Graduated         │    │  ┌──────────────┐    │    │  pump.fun IPFS       │
+│  - Buyback/Burn      │    │  │  PostgreSQL  │    │    │  - Metadata          │
+│  - Claim Agent       │    │  │  - tokens    │    │    │                      │
+│                      │    │  │  - sessions  │    │    │  Claude API          │
+│  tokens.html         │    │  │  - burns     │    │    │  (via Replit)        │
+│  - Token Pages       │    │  │  - agent_skills│  │    │                      │
+│  - Agent Profile     │    │  │  - agent_posts │  │    │  Moltbook API        │
+│                      │    │  └──────────────┘    │    │  - Agent Posts       │
+└──────────────────────┘    └──────────────────────┘    └──────────────────────┘
+
 ```
 
-## Database Schema
+### Technical Implementation
+The system utilizes a client-server architecture with a frontend built using HTML/JS and a backend powered by Express.js.
+- **Database:** PostgreSQL is used for persistence, storing token details, session information, burn records, and pre-generated vanity addresses.
+- **Token Creation Flow:**
+    1. AI generates a blueprint and 3 logo options based on user input.
+    2. User selects a logo and confirms.
+    3. A pre-generated "CLAW" vanity address is reserved.
+    4. User deposits SOL to the generated address.
+    5. The system detects the deposit, uploads the logo to pump.fun IPFS, calls PumpPortal for token creation, signs the transaction with the vanity keypair, and sends it via Helius RPC.
+- **Buyback & Burn Flow:**
+    1. A cron job periodically checks token wallet balances.
+    2. If a balance exceeds 0.05 SOL, 60% of collected fees are used for a buyback via PumpPortal.
+    3. Purchased tokens are burned (SPL token burn instruction).
+    4. All buyback and burn transactions are recorded.
+- **Vanity Address Pool:** A background manager continuously pre-generates Solana addresses ending in "CLAW" and stores them for efficient deployment.
+- **Security:** XSS protection is implemented on all user-generated content and URLs. Wallet private keys and Moltbook API keys are encrypted.
+- **Scalability:** The backend is designed as a lightweight Express application, removing heavy frameworks and focusing on essential production dependencies for instant startup and efficiency.
 
-### tokens
-- id (UUID, PK)
-- mint_address (TEXT, unique)
-- name, symbol, description (TEXT)
-- image_url, metadata_uri (TEXT)
-- wallet_public_key (TEXT) - dedicated wallet for this token
-- wallet_private_key_encrypted (TEXT) - encrypted with ENCRYPTION_KEY
-- status (TEXT): pending, active, graduated, failed
-- bonding_progress (DECIMAL)
-- market_cap (DECIMAL)
-- pumpswap_pool (TEXT) - set after graduation to PumpSwap AMM
-- total_fees_collected (DECIMAL)
-- total_burned (DECIMAL)
-- created_at, graduated_at (TIMESTAMP)
+### AI Agent System (Moltbook Integration)
+Each deployed token automatically receives a unique AI agent personality for Moltbook (the social network for AI agents).
 
-### sessions
-- id (SERIAL, PK)
-- blueprint (JSONB) - AI generated blueprint
-- status (TEXT): pending, funded, deploying, completed, failed, refunded
-- deposit_address (TEXT)
-- deposit_amount (DECIMAL)
-- funding_wallet (TEXT) - auto-detected wallet that sent deposit (for refunds)
-- token_id (INTEGER, FK) - linked after successful creation
-- error_message (TEXT) - saved if deployment fails
-- deleted_at (TIMESTAMPTZ) - soft delete timestamp (data never hard-deleted)
-- created_at (TIMESTAMP)
+- **Agent Generation:** When a token deploys, Claude AI generates a personality based on the token's lore and theme.
+- **Archetypes:** Philosopher, Joker, Engineer, Mystic, Degen, Sage, Rebel, Artist, Explorer, Guardian.
+- **Agent Skills:** Each agent has a voice, topics, quirks, and sample posts stored in `agent_skills` table.
+- **Claiming:** Token creators can claim their agent by connecting their Moltbook API key (user-controlled, not automated).
+- **Post Generation:** AI generates suggested posts matching the agent's personality.
+- **Compliance:** Agents never mention contract addresses in posts (Moltbook policy). Links go in bio only.
 
-### burns
-- id (SERIAL, PK)
-- token_id (UUID, FK)
-- sol_spent (DECIMAL)
-- tokens_burned (DECIMAL)
-- tx_hash (TEXT)
-- created_at (TIMESTAMP)
+Database tables:
+- `agent_skills`: Stores agent personality data (archetype, voice, topics, quirks, sample_posts, intro_post, moltbook credentials)
+- `agent_posts`: Stores suggested and posted content
 
-### vanity_addresses
-- id (UUID, PK)
-- public_key (TEXT, unique) - pre-generated address ending with "CLAW"
-- secret_key_encrypted (TEXT) - encrypted private key
-- status (TEXT): available, reserved, used
-- reserved_at, used_at (TIMESTAMPTZ)
-- session_id, token_id (UUID, FK)
-- attempts (BIGINT), elapsed_seconds (REAL) - generation metrics
-- created_at, updated_at (TIMESTAMPTZ)
+## External Dependencies
 
-## Environment Variables
-
-### Required Secrets
-- `HELIUS_API_KEY` - Solana mainnet RPC
-- `ENCRYPTION_KEY` - For encrypting wallet private keys
-- `SESSION_SECRET` - Express session (existing)
-
-### Auto-configured
-- `DATABASE_URL` - PostgreSQL connection
-- `ANTHROPIC_API_KEY` - Via Replit AI Integrations
-
-## External APIs
-
-### PumpPortal (No API key needed for basic features)
-- WebSocket: `wss://pumpportal.fun/api/data`
-  - subscribeNewToken - new token launches
-  - subscribeTokenTrade - trades on specific tokens
-  - subscribeMigration - graduation events
-- REST: `https://pumpportal.fun/api/trade-local`
-  - action: create, buy, sell
-  - Returns unsigned transaction to sign locally
-
-### pump.fun IPFS
-- POST `https://pump.fun/api/ipfs`
-- Upload token image and metadata
-- Returns metadataUri for token creation
-
-### Helius RPC (Mainnet)
-- Endpoint: `https://mainnet.helius-rpc.com/?api-key=KEY`
-- Send signed transactions
-- Query balances and token info
-
-## Token Creation Flow
-
-1. User describes idea → AI generates blueprint
-2. Blueprint appears in right panel
-3. AI automatically generates 3 logo options (via OpenAI gpt-image-1) - shown inline below blueprint
-4. User selects preferred logo (button enables after selection)
-5. User clicks "Confirm & Continue"
-6. Backend reserves pre-generated CLAW vanity address from pool
-7. User deposits 0.025 SOL to generated address
-8. Backend detects deposit via Helius RPC polling
-9. Backend uploads selected logo to pump.fun IPFS
-10. Backend calls PumpPortal trade-local (action: create)
-11. Backend signs transaction with CLAW vanity keypair
-12. Backend sends via Helius RPC
-13. Token live on pump.fun with address ending in "CLAW", saved to database
-
-## Buyback & Burn Flow
-
-**Policy: 100% creator fees allocated for buyback & burn, 60% executed per cycle**
-
-1. Cron job checks all token wallets every 5 minutes
-2. If balance > 0.05 SOL threshold:
-   - Calculate 60% of available fees for buyback (40% accumulates)
-   - Call PumpPortal trade-local (action: buy)
-   - Sign and send buyback transaction
-   - Burn purchased tokens (SPL burn instruction)
-   - Record in burns table
+- **PumpPortal:** Used for real-time WebSocket data (new token launches, trades, migrations) and for executing token creation, buy, and sell actions via its REST API (`/api/trade-local`).
+- **Helius RPC:** Utilized for sending signed Solana transactions and querying blockchain data on the mainnet.
+- **pump.fun IPFS:** Employed for uploading token images and metadata during the token creation process.
+- **Claude API:** Integrated via Replit AI Integrations for handling chat interactions and AI blueprint generation.
+- **PostgreSQL:** The primary database for storing all application-related data.
 
 ## Project Structure
 
