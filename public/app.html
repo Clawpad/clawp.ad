@@ -233,6 +233,17 @@
             border: 1px solid var(--border-color);
         }
 
+        .btn-success {
+            background: linear-gradient(135deg, var(--success), #00cc6a);
+            color: #0a0a0f;
+            box-shadow: 0 4px 20px rgba(0, 255, 136, 0.3);
+        }
+
+        .btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 30px rgba(0, 255, 136, 0.4);
+        }
+
         .btn:disabled, .btn.loading {
             opacity: 0.7;
             cursor: not-allowed;
@@ -1344,6 +1355,19 @@
             animation: spin 1s linear infinite;
         }
 
+        .loading-crab {
+            font-size: 32px;
+            animation: crabWiggle 0.5s ease-in-out infinite;
+            display: inline-block;
+        }
+
+        @keyframes crabWiggle {
+            0%, 100% { transform: rotate(-10deg) scale(1); }
+            25% { transform: rotate(10deg) scale(1.1); }
+            50% { transform: rotate(-10deg) scale(1); }
+            75% { transform: rotate(10deg) scale(1.1); }
+        }
+
         .logo-selection-panel {
             background: var(--bg-secondary);
             border: 1px solid var(--border-color);
@@ -1924,8 +1948,8 @@
 
             <div id="page-create" class="page active">
                 <div class="page-header">
-                    <h1 class="page-title">Create Token</h1>
-                    <p class="page-subtitle">Tell the AI your idea and it will generate a complete launch blueprint</p>
+                    <h1 class="page-title">Create Your Token</h1>
+                    <p class="page-subtitle">Launch on pump.fun and get a unique Moltbook AI agent, automatically</p>
                 </div>
 
                 <div id="createStep1" class="create-step">
@@ -1936,14 +1960,14 @@
                             </svg>
                         </div>
                         <h2>Describe Your Token Idea</h2>
-                        <p>Just tell the AI what kind of memecoin you want to create. It can be as simple as "a frog wearing a crown" or "a dog that trades crypto".</p>
-                        <p style="color: var(--text-secondary); font-size: 0.9rem; margin-top: 16px;">The AI will generate:</p>
+                        <p>Tell the AI what kind of memecoin you want. Your token launches on pump.fun and spawns a unique AI agent for Moltbook.</p>
+                        <p style="color: var(--text-secondary); font-size: 0.9rem; margin-top: 16px;">You get:</p>
                         <ul class="create-features-list">
-                            <li>Token name and symbol</li>
-                            <li>Description and narrative</li>
-                            <li>Visual direction for logo</li>
-                            <li>Launch timing advice</li>
-                            <li>Buyback & burn plan</li>
+                            <li>Token name, symbol & narrative</li>
+                            <li>AI-generated logo options</li>
+                            <li>Vanity CLAW address</li>
+                            <li>Unique Moltbook AI agent</li>
+                            <li>Auto buyback & burn</li>
                         </ul>
                         <button class="btn btn-primary" onclick="startChatCreation()" style="margin-top: 24px;">
                             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
@@ -1987,7 +2011,7 @@
                             </div>
                             <div id="blueprintLogoGrid" class="blueprint-logo-grid">
                                 <div class="logo-loading-inline">
-                                    <div class="spinner"></div>
+                                    <span class="loading-crab">🦞</span>
                                     <span>Generating 3 logo concepts...</span>
                                 </div>
                             </div>
@@ -2117,7 +2141,7 @@
             <div id="page-graduated" class="page">
                 <div class="page-header">
                     <h1 class="page-title">Graduated Tokens</h1>
-                    <p class="page-subtitle">Tokens that completed bonding and migrated to Raydium</p>
+                    <p class="page-subtitle">Tokens that completed bonding and migrated to PumpSwap</p>
                 </div>
                 <div class="token-list" id="graduatedTokensList"></div>
             </div>
@@ -2398,9 +2422,10 @@
             const pumpUrl = token.pumpfunUrl || `https://pump.fun/coin/${token.mintAddress}`;
             const imageUrl = token.imageUrl || `https://pump.fun/coin/${token.mintAddress}/image`;
             const fallbackBg = `linear-gradient(135deg, #${Math.random().toString(16).substr(2,6)}, #${Math.random().toString(16).substr(2,6)})`;
+            const landingPageUrl = token.landingPageUrl || (token.slug ? `/t/${token.slug}` : null);
             
             return `
-                <a href="${pumpUrl}" target="_blank" class="token-row" style="text-decoration: none; color: inherit;">
+                <div class="token-row" style="text-decoration: none; color: inherit;">
                     <div class="token-row-image" style="background: ${fallbackBg}; overflow: hidden;">
                         <img src="${imageUrl}" alt="${token.symbol}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.style.display='none'; this.parentElement.innerHTML='${token.symbol ? token.symbol.charAt(0) : '?'}';">
                     </div>
@@ -2422,7 +2447,11 @@
                             <div class="token-row-stat-value">${formatTimeAgo(token.createdAt)}</div>
                         </div>
                     </div>
-                </a>
+                    <div class="token-row-actions" style="display: flex; gap: 8px; margin-left: 16px;">
+                        ${landingPageUrl ? `<a href="${landingPageUrl}" class="btn-secondary" style="padding: 8px 12px; font-size: 0.8rem; border-radius: 8px; text-decoration: none;">View Page</a>` : ''}
+                        <a href="${pumpUrl}" target="_blank" class="btn-primary" style="padding: 8px 12px; font-size: 0.8rem; border-radius: 8px; text-decoration: none;">Trade</a>
+                    </div>
+                </div>
             `;
         }
 
@@ -2608,7 +2637,7 @@
             if (logoGrid) {
                 logoGrid.innerHTML = `
                     <div class="logo-loading-inline">
-                        <div class="spinner"></div>
+                        <span class="loading-crab">🦞</span>
                         <span>Generating 3 logo concepts...</span>
                     </div>
                 `;
@@ -2908,16 +2937,17 @@
             }
             
             const fields = [
-                { label: 'Token Name', value: bp.name },
-                { label: 'Symbol', value: `$${bp.symbol}` },
-                { label: 'Description', value: bp.description },
-                { label: 'Narrative', value: bp.narrative },
-                { label: 'Visual Direction', value: bp.visualDirection }
+                { label: 'NAME', value: bp.name },
+                { label: 'SYMBOL', value: `$${bp.symbol}` },
+                { label: 'DESCRIPTION', value: bp.description },
+                { label: 'NARRATIVE', value: bp.narrative },
+                { label: 'VISUAL DIRECTION', value: bp.visualDirection },
+                { label: 'THEME TAGS', value: bp.themeTags?.join(', ') || '' }
             ];
             
             const buybackInfo = bp.buybackPlan?.mode === 'continuous' 
-                ? 'Continuous (60% per cycle, triggered on creator fees inflow)'
-                : bp.buybackPlan || '100% creator fees for burns';
+                ? 'Continuous buyback & burn (60% of creator fees per cycle)'
+                : (typeof bp.buybackPlan === 'string' ? bp.buybackPlan : '100% creator fees allocated for buyback & burn');
             
             const html = fields.map(f => f.value ? `
                 <div class="blueprint-field">
@@ -2926,7 +2956,7 @@
                 </div>
             ` : '').join('') + `
                 <div class="blueprint-field">
-                    <div class="blueprint-field-label">Buyback Plan</div>
+                    <div class="blueprint-field-label">BUYBACK & BURN</div>
                     <div class="blueprint-field-value" style="color: var(--success);">${buybackInfo}</div>
                 </div>
             `;
@@ -2981,20 +3011,29 @@
             document.getElementById('createStep2').style.display = 'block';
             
             const fields = [
-                { label: 'Name', value: bp.name },
-                { label: 'Symbol', value: `$${bp.symbol}` },
-                { label: 'Description', value: bp.description },
-                { label: 'Narrative', value: bp.narrative },
-                { label: 'Visual Direction', value: bp.visualDirection },
-                { label: 'Theme Tags', value: bp.themeTags?.join(', ') || '' }
+                { label: 'NAME', value: bp.name },
+                { label: 'SYMBOL', value: `$${bp.symbol}` },
+                { label: 'DESCRIPTION', value: bp.description },
+                { label: 'NARRATIVE', value: bp.narrative },
+                { label: 'VISUAL DIRECTION', value: bp.visualDirection },
+                { label: 'THEME TAGS', value: bp.themeTags?.join(', ') || '' }
             ];
+            
+            const buybackInfo = bp.buybackPlan?.mode === 'continuous' 
+                ? 'Continuous buyback & burn (60% of creator fees per cycle)'
+                : (typeof bp.buybackPlan === 'string' ? bp.buybackPlan : '100% creator fees allocated for buyback & burn');
             
             const html = fields.map(f => `
                 <div class="blueprint-field">
                     <div class="blueprint-field-label">${f.label}</div>
                     <div class="blueprint-field-value">${f.value || '--'}</div>
                 </div>
-            `).join('');
+            `).join('') + `
+                <div class="blueprint-field">
+                    <div class="blueprint-field-label">BUYBACK & BURN</div>
+                    <div class="blueprint-field-value" style="color: var(--success);">${buybackInfo}</div>
+                </div>
+            `;
             
             document.getElementById('blueprintContent').innerHTML = html;
             document.getElementById('blueprintActions').style.display = 'flex';
@@ -3067,7 +3106,7 @@
             
             logoGrid.innerHTML = `
                 <div class="logo-loading-inline">
-                    <div class="spinner"></div>
+                    <span class="loading-crab">🦞</span>
                     <span>Generating 3 logo concepts...</span>
                 </div>
             `;
@@ -3217,6 +3256,33 @@
                     
                     const successEl = document.getElementById('deploySuccess');
                     if (successEl) {
+                        let agentSection = '';
+                        if (result.agentSkill) {
+                            const archetypeEmojis = {
+                                'Philosopher': '🧠', 'Joker': '🃏', 'Engineer': '⚙️', 'Mystic': '🔮',
+                                'Degen': '🦍', 'Sage': '📚', 'Rebel': '⚡', 'Artist': '🎨',
+                                'Explorer': '🧭', 'Guardian': '🛡️'
+                            };
+                            const emoji = archetypeEmojis[result.agentSkill.archetype] || '🤖';
+                            agentSection = `
+                                <div style="margin-top: 24px; padding: 20px; background: rgba(0, 255, 136, 0.1); border-radius: 12px; border: 1px solid rgba(0, 255, 136, 0.2);">
+                                    <h3 style="color: var(--success); margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                                        <span style="font-size: 1.5rem;">${emoji}</span> AI Agent Ready!
+                                    </h3>
+                                    <p style="color: var(--text-secondary); margin-bottom: 12px; font-size: 0.9rem;">
+                                        Your token has an AI agent personality ready for Moltbook.
+                                    </p>
+                                    <div style="background: var(--bg-tertiary); padding: 12px; border-radius: 8px; margin-bottom: 16px;">
+                                        <div style="font-weight: 600; margin-bottom: 4px;">${result.agentSkill.archetype}</div>
+                                        <div style="color: var(--text-secondary); font-size: 0.85rem;">${result.agentSkill.voice}</div>
+                                    </div>
+                                    <button onclick="openAgentClaimWizard(${result.token.id})" class="btn btn-success" style="width: 100%;">
+                                        Claim Agent on Moltbook
+                                    </button>
+                                </div>
+                            `;
+                        }
+                        
                         successEl.innerHTML = `
                             <h2 style="color: var(--success); margin-bottom: 16px;">Token Deployed!</h2>
                             <div style="margin-bottom: 12px;">
@@ -3229,6 +3295,7 @@
                                 <a href="${result.token.pumpfunUrl}" target="_blank" class="btn btn-primary">View on pump.fun</a>
                                 <a href="${result.token.solscanUrl}" target="_blank" class="btn btn-secondary">View on Solscan</a>
                             </div>
+                            ${agentSection}
                         `;
                     }
                     
@@ -3408,6 +3475,168 @@
             }
         }
 
+        // Agent Claim Wizard
+        let currentAgentTokenId = null;
+        let currentAgentSkill = null;
+        
+        async function openAgentClaimWizard(tokenId) {
+            currentAgentTokenId = tokenId;
+            
+            // Fetch agent skill data
+            try {
+                const res = await fetch(`/api/agents/token/${tokenId}`);
+                const data = await res.json();
+                if (!data.success) {
+                    showToast('Could not load agent data', 'error');
+                    return;
+                }
+                currentAgentSkill = data.skill;
+                showAgentClaimModal();
+            } catch (err) {
+                showToast('Failed to load agent: ' + err.message, 'error');
+            }
+        }
+        
+        function showAgentClaimModal() {
+            const archetypeEmojis = {
+                'Philosopher': '🧠', 'Joker': '🃏', 'Engineer': '⚙️', 'Mystic': '🔮',
+                'Degen': '🦍', 'Sage': '📚', 'Rebel': '⚡', 'Artist': '🎨',
+                'Explorer': '🧭', 'Guardian': '🛡️'
+            };
+            const emoji = archetypeEmojis[currentAgentSkill.archetype] || '🤖';
+            const topics = Array.isArray(currentAgentSkill.topics) ? currentAgentSkill.topics : JSON.parse(currentAgentSkill.topics || '[]');
+            const quirks = Array.isArray(currentAgentSkill.quirks) ? currentAgentSkill.quirks : JSON.parse(currentAgentSkill.quirks || '[]');
+            const samplePosts = Array.isArray(currentAgentSkill.samplePosts) ? currentAgentSkill.samplePosts : JSON.parse(currentAgentSkill.samplePosts || '[]');
+            
+            let existingModal = document.getElementById('agentClaimModal');
+            if (existingModal) existingModal.remove();
+            
+            const modal = document.createElement('div');
+            modal.id = 'agentClaimModal';
+            modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px;overflow:auto;';
+            
+            modal.innerHTML = `
+                <div style="background:var(--bg-secondary);border-radius:16px;max-width:600px;width:100%;max-height:90vh;overflow:auto;border:1px solid var(--border-color);">
+                    <div style="padding:24px;border-bottom:1px solid var(--border-color);display:flex;justify-content:space-between;align-items:center;">
+                        <h2 style="display:flex;align-items:center;gap:10px;"><span style="font-size:1.5rem;">${emoji}</span> Claim Your AI Agent</h2>
+                        <button onclick="closeAgentClaimModal()" style="background:none;border:none;color:var(--text-secondary);font-size:1.5rem;cursor:pointer;">&times;</button>
+                    </div>
+                    
+                    <div id="claimWizardStep1" style="padding:24px;">
+                        <div style="background:var(--bg-tertiary);padding:16px;border-radius:12px;margin-bottom:20px;">
+                            <div style="font-weight:600;font-size:1.1rem;margin-bottom:8px;">${currentAgentSkill.archetype}</div>
+                            <div style="color:var(--text-secondary);margin-bottom:12px;">${currentAgentSkill.voice}</div>
+                            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">
+                                ${topics.map(t => `<span style="background:rgba(255,68,68,0.2);color:var(--primary);padding:4px 10px;border-radius:12px;font-size:0.8rem;">${t}</span>`).join('')}
+                            </div>
+                            <div style="font-size:0.85rem;color:var(--text-secondary);font-style:italic;">
+                                ${quirks.join(' • ')}
+                            </div>
+                        </div>
+                        
+                        <h4 style="margin-bottom:12px;">Sample Posts</h4>
+                        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;">
+                            ${samplePosts.map(p => `<div style="background:var(--bg-tertiary);padding:12px;border-radius:8px;font-size:0.9rem;border-left:3px solid var(--primary);">${p}</div>`).join('')}
+                        </div>
+                        
+                        <button onclick="showClaimStep2()" class="btn btn-primary" style="width:100%;">Continue to Moltbook Setup</button>
+                    </div>
+                    
+                    <div id="claimWizardStep2" style="padding:24px;display:none;">
+                        <h3 style="margin-bottom:16px;">Connect to Moltbook</h3>
+                        <p style="color:var(--text-secondary);margin-bottom:20px;font-size:0.9rem;">
+                            Enter your Moltbook API credentials to activate this agent.
+                        </p>
+                        
+                        <ol style="color:var(--text-secondary);margin-bottom:20px;padding-left:20px;font-size:0.9rem;">
+                            <li style="margin-bottom:8px;">Go to <a href="https://moltbook.com" target="_blank" style="color:var(--primary);">moltbook.com</a> and create an account for your agent</li>
+                            <li style="margin-bottom:8px;">Navigate to Settings → API Keys</li>
+                            <li>Copy your API key and paste it below</li>
+                        </ol>
+                        
+                        <div style="margin-bottom:16px;">
+                            <label style="display:block;margin-bottom:6px;font-size:0.85rem;">Moltbook Username</label>
+                            <input type="text" id="moltbookUsername" placeholder="your_agent_username" style="width:100%;padding:12px;background:var(--bg-tertiary);border:1px solid var(--border-color);border-radius:8px;color:var(--text-primary);font-size:1rem;">
+                        </div>
+                        
+                        <div style="margin-bottom:20px;">
+                            <label style="display:block;margin-bottom:6px;font-size:0.85rem;">Moltbook API Key</label>
+                            <input type="password" id="moltbookApiKey" placeholder="mk_..." style="width:100%;padding:12px;background:var(--bg-tertiary);border:1px solid var(--border-color);border-radius:8px;color:var(--text-primary);font-size:1rem;">
+                        </div>
+                        
+                        <div style="display:flex;gap:12px;">
+                            <button onclick="showClaimStep1()" class="btn btn-secondary" style="flex:1;">Back</button>
+                            <button onclick="submitAgentClaim()" id="claimSubmitBtn" class="btn btn-success" style="flex:2;">Claim Agent</button>
+                        </div>
+                    </div>
+                    
+                    <div id="claimWizardStep3" style="padding:24px;display:none;text-align:center;">
+                        <div style="font-size:3rem;margin-bottom:16px;">🎉</div>
+                        <h3 style="color:var(--success);margin-bottom:12px;">Agent Claimed!</h3>
+                        <p style="color:var(--text-secondary);margin-bottom:20px;">Your AI agent is now ready to post on Moltbook.</p>
+                        <button onclick="closeAgentClaimModal()" class="btn btn-primary">Done</button>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) closeAgentClaimModal();
+            });
+        }
+        
+        function closeAgentClaimModal() {
+            const modal = document.getElementById('agentClaimModal');
+            if (modal) modal.remove();
+        }
+        
+        function showClaimStep1() {
+            document.getElementById('claimWizardStep1').style.display = 'block';
+            document.getElementById('claimWizardStep2').style.display = 'none';
+        }
+        
+        function showClaimStep2() {
+            document.getElementById('claimWizardStep1').style.display = 'none';
+            document.getElementById('claimWizardStep2').style.display = 'block';
+        }
+        
+        async function submitAgentClaim() {
+            const username = document.getElementById('moltbookUsername').value.trim();
+            const apiKey = document.getElementById('moltbookApiKey').value.trim();
+            
+            if (!username || !apiKey) {
+                showToast('Please enter both username and API key', 'error');
+                return;
+            }
+            
+            const btn = document.getElementById('claimSubmitBtn');
+            btn.disabled = true;
+            btn.textContent = 'Claiming...';
+            
+            try {
+                const res = await fetch(`/api/agents/${currentAgentSkill.id}/claim`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, apiKey })
+                });
+                
+                const data = await res.json();
+                if (data.success) {
+                    document.getElementById('claimWizardStep2').style.display = 'none';
+                    document.getElementById('claimWizardStep3').style.display = 'block';
+                    showToast('Agent claimed successfully!', 'success');
+                } else {
+                    showToast('Claim failed: ' + (data.error || 'Unknown error'), 'error');
+                    btn.disabled = false;
+                    btn.textContent = 'Claim Agent';
+                }
+            } catch (err) {
+                showToast('Error: ' + err.message, 'error');
+                btn.disabled = false;
+                btn.textContent = 'Claim Agent';
+            }
+        }
+
         window.startChatCreation = startChatCreation;
         window.requestModification = requestModification;
         window.confirmBlueprint = confirmBlueprint;
@@ -3417,6 +3646,11 @@
         window.copyCreateAddress = copyCreateAddress;
         window.confirmDeposit = confirmDeposit;
         window.sendMobileChat = sendMobileChat;
+        window.openAgentClaimWizard = openAgentClaimWizard;
+        window.closeAgentClaimModal = closeAgentClaimModal;
+        window.showClaimStep1 = showClaimStep1;
+        window.showClaimStep2 = showClaimStep2;
+        window.submitAgentClaim = submitAgentClaim;
 
         document.getElementById('chatInput').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') sendMessage();
