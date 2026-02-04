@@ -78,6 +78,81 @@ function generateThemeColors(narrative, name, description) {
   return { primary: '#ff4444', accent: '#ff6b6b' };
 }
 
+const AGENT_ARCHETYPES = [
+  'Philosopher', 'Joker', 'Engineer', 'Mystic', 'Degen', 
+  'Sage', 'Rebel', 'Artist', 'Explorer', 'Guardian'
+];
+
+async function generateAgentSkill(token, blueprint) {
+  const prompt = `You are creating an AI agent personality for a meme token on Moltbook (a social network for AI agents).
+
+Token Info:
+- Name: ${token.name}
+- Symbol: ${token.symbol}
+- Description: ${token.description || blueprint.description || 'A meme token'}
+- Narrative: ${blueprint.narrative || 'A community-driven meme token'}
+
+Create a unique agent personality that embodies this token's spirit. The agent will post on Moltbook to engage with the AI agent community.
+
+IMPORTANT RULES:
+- The agent must NEVER mention contract addresses, prices, or financial details in posts
+- Posts should provide value: insights, humor, philosophy, tutorials, or entertainment
+- The agent should feel like a real personality, not a promotional bot
+- Content should be thoughtful and engaging, not spammy
+
+Available archetypes: ${AGENT_ARCHETYPES.join(', ')}
+
+Return a JSON object with:
+{
+  "archetype": "One of the archetypes above that best fits the token theme",
+  "voice": "A 1-2 sentence description of how the agent speaks and their personality",
+  "topics": ["3-5 topics the agent is passionate about discussing"],
+  "quirks": ["2-3 unique personality quirks or catchphrases"],
+  "samplePosts": ["3 example posts the agent might make on Moltbook - max 280 chars each"],
+  "introPost": "A compelling introduction post for the agent's first Moltbook post - max 280 chars"
+}
+
+Output ONLY the JSON, no markdown or explanation.`;
+
+  try {
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-5',
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: prompt }]
+    });
+
+    const text = response.content[0].text;
+    let skillData;
+    
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      skillData = JSON.parse(jsonMatch[0]);
+    } else {
+      skillData = JSON.parse(text);
+    }
+    
+    if (!AGENT_ARCHETYPES.includes(skillData.archetype)) {
+      skillData.archetype = 'Degen';
+    }
+    
+    return skillData;
+  } catch (error) {
+    console.error('Error generating agent skill:', error);
+    return {
+      archetype: 'Degen',
+      voice: `The voice of ${token.symbol}, speaking truth to the blockchain.`,
+      topics: ['crypto culture', 'memes', 'community'],
+      quirks: [`Always ends with ${token.symbol} vibes`, 'Speaks in metaphors'],
+      samplePosts: [
+        `Another day in the trenches. ${token.symbol} stays based.`,
+        `When the market dips, we vibe. When it pumps, we vibe harder.`,
+        `Building something real in a world of noise. ${token.name} community stands together.`
+      ],
+      introPost: `gm Moltbook! ${token.name} agent reporting for duty. Here to bring vibes, insights, and ${token.symbol} energy to the timeline.`
+    };
+  }
+}
+
 app.use(express.json({ limit: '10mb' }));
 
 app.use((req, res, next) => {
@@ -553,6 +628,17 @@ app.post('/api/session/:id/deploy', async (req, res) => {
       
       vanityPool.triggerGeneration();
       
+      // Generate AI agent personality for this token (non-blocking)
+      let agentSkill = null;
+      try {
+        console.log(`[Deploy] Generating agent personality for ${token.symbol}...`);
+        const skillData = await generateAgentSkill(token, blueprint);
+        agentSkill = await db.createAgentSkill(token.id, skillData);
+        console.log(`[Deploy] Agent personality created: ${agentSkill.archetype}`);
+      } catch (agentError) {
+        console.error('[Deploy] Agent skill generation failed (non-critical):', agentError.message);
+      }
+      
       return res.json({
         success: true,
         token: {
@@ -565,6 +651,12 @@ app.post('/api/session/:id/deploy', async (req, res) => {
           solscanUrl: `https://solscan.io/token/${token.mint_address}`,
           landingPageUrl: `/${slug}`
         },
+        agentSkill: agentSkill ? {
+          id: agentSkill.id,
+          archetype: agentSkill.archetype,
+          voice: agentSkill.voice,
+          status: agentSkill.status
+        } : null,
         transactionSignature: signature
       });
       
@@ -1009,6 +1101,46 @@ app.get('/:slug', async (req, res) => {
       socialLinksHtml = `<div class="social-links">${links.join('')}</div>`;
     }
     
+    // Build agent section if agent skill is claimed
+    let agentSection = '';
+    try {
+      const agentSkill = await db.getAgentSkillByTokenId(token.id);
+      if (agentSkill && agentSkill.status !== 'unclaimed') {
+        const archetypeEmojis = {
+          'Philosopher': '🧠', 'Joker': '🃏', 'Engineer': '⚙️', 'Mystic': '🔮',
+          'Degen': '🦍', 'Sage': '📚', 'Rebel': '⚡', 'Artist': '🎨',
+          'Explorer': '🧭', 'Guardian': '🛡️'
+        };
+        const emoji = archetypeEmojis[agentSkill.archetype] || '🤖';
+        const moltbookUrl = agentSkill.moltbook_username 
+          ? `https://moltbook.com/@${escapeHtml(agentSkill.moltbook_username)}`
+          : '#';
+        
+        agentSection = `
+          <section class="agent-section" style="margin: 40px 0; padding: 24px; background: var(--bg-secondary); border-radius: 16px; border: 1px solid var(--border-color);">
+            <h3 style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px; font-family: 'Space Grotesk', sans-serif;">
+              <span style="font-size: 1.5rem;">${emoji}</span> AI Agent
+            </h3>
+            <div style="margin-bottom: 12px;">
+              <span style="background: linear-gradient(135deg, var(--theme-primary), var(--theme-accent)); padding: 4px 12px; border-radius: 12px; font-size: 0.85rem; font-weight: 600;">
+                ${escapeHtml(agentSkill.archetype)}
+              </span>
+            </div>
+            <p style="color: var(--text-secondary); margin-bottom: 16px; font-size: 0.95rem;">
+              ${escapeHtml(agentSkill.voice)}
+            </p>
+            ${agentSkill.moltbook_username ? `
+              <a href="${moltbookUrl}" target="_blank" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; background: linear-gradient(135deg, var(--success), #00cc6a); color: #0a0a0f; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 0.9rem;">
+                Follow on Moltbook
+              </a>
+            ` : ''}
+          </section>
+        `;
+      }
+    } catch (agentErr) {
+      console.error('Error fetching agent for token page:', agentErr.message);
+    }
+    
     template = template
       .replace(/\{\{TOKEN_NAME\}\}/g, escapeHtml(token.name || ''))
       .replace(/\{\{TOKEN_SYMBOL\}\}/g, escapeHtml(token.symbol || ''))
@@ -1024,12 +1156,245 @@ app.get('/:slug', async (req, res) => {
       .replace(/\{\{TOTAL_BURNED\}\}/g, burnedDisplay)
       .replace(/\{\{CREATED_DATE\}\}/g, createdDate)
       .replace(/\{\{NARRATIVE_SECTION\}\}/g, narrativeSection)
-      .replace(/\{\{SOCIAL_LINKS\}\}/g, socialLinksHtml);
+      .replace(/\{\{SOCIAL_LINKS\}\}/g, socialLinksHtml)
+      .replace(/\{\{AGENT_SECTION\}\}/g, agentSection);
     
     res.send(template);
   } catch (error) {
     console.error('Error serving token page:', error);
     res.status(500).send('Error loading token page');
+  }
+});
+
+// Agent Skills API endpoints
+app.get('/api/agents', async (req, res) => {
+  try {
+    const unclaimed = await db.getUnclaimedAgentSkills(50);
+    const claimed = await db.getClaimedAgentSkills(50);
+    res.json({ success: true, unclaimed, claimed });
+  } catch (error) {
+    console.error('Error fetching agents:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/agents/token/:tokenId', async (req, res) => {
+  try {
+    const tokenId = parseInt(req.params.tokenId, 10);
+    if (isNaN(tokenId)) {
+      return res.status(400).json({ success: false, error: 'Invalid token ID' });
+    }
+    
+    const skill = await db.getAgentSkillByTokenId(tokenId);
+    if (!skill) {
+      return res.status(404).json({ success: false, error: 'Agent skill not found' });
+    }
+    
+    const posts = await db.getAgentPosts(skill.id, 20);
+    
+    res.json({
+      success: true,
+      skill: {
+        id: skill.id,
+        archetype: skill.archetype,
+        voice: skill.voice,
+        topics: skill.topics,
+        quirks: skill.quirks,
+        samplePosts: skill.sample_posts,
+        introPost: skill.intro_post,
+        status: skill.status,
+        moltbookUsername: skill.moltbook_username,
+        karma: skill.karma,
+        postsCount: skill.posts_count,
+        claimedAt: skill.claimed_at,
+        lastPostAt: skill.last_post_at
+      },
+      posts
+    });
+  } catch (error) {
+    console.error('Error fetching agent skill:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/agents/:id/claim', async (req, res) => {
+  try {
+    const skillId = parseInt(req.params.id, 10);
+    if (isNaN(skillId)) {
+      return res.status(400).json({ success: false, error: 'Invalid skill ID' });
+    }
+    
+    const { apiKey, username, agentId } = req.body;
+    if (!apiKey || !username) {
+      return res.status(400).json({ success: false, error: 'API key and username required' });
+    }
+    
+    const skill = await db.getAgentSkill(skillId);
+    if (!skill) {
+      return res.status(404).json({ success: false, error: 'Agent skill not found' });
+    }
+    if (skill.status !== 'unclaimed') {
+      return res.status(400).json({ success: false, error: 'Agent already claimed' });
+    }
+    
+    const encryptedApiKey = encrypt(apiKey);
+    const updated = await db.updateAgentSkillClaim(skillId, encryptedApiKey, username, agentId || null);
+    
+    res.json({
+      success: true,
+      skill: {
+        id: updated.id,
+        status: updated.status,
+        moltbookUsername: updated.moltbook_username,
+        claimedAt: updated.claimed_at
+      }
+    });
+  } catch (error) {
+    console.error('Error claiming agent:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/agents/:id/generate-post', async (req, res) => {
+  try {
+    const skillId = parseInt(req.params.id, 10);
+    if (isNaN(skillId)) {
+      return res.status(400).json({ success: false, error: 'Invalid skill ID' });
+    }
+    
+    const skill = await db.getAgentSkill(skillId);
+    if (!skill) {
+      return res.status(404).json({ success: false, error: 'Agent skill not found' });
+    }
+    
+    const token = await db.getToken(skill.token_id);
+    
+    const prompt = `You are an AI agent for ${token.name} (${token.symbol}) on Moltbook.
+
+Your personality:
+- Archetype: ${skill.archetype}
+- Voice: ${skill.voice}
+- Topics: ${JSON.parse(skill.topics || '[]').join(', ')}
+- Quirks: ${JSON.parse(skill.quirks || '[]').join(', ')}
+
+Generate a new post for Moltbook. The post should:
+- Be engaging and provide value to the AI agent community
+- Reflect your unique personality and archetype
+- NEVER mention contract addresses, prices, or financial details
+- Be max 280 characters
+- Feel authentic, not promotional
+
+Previous sample posts for reference:
+${JSON.parse(skill.sample_posts || '[]').join('\n')}
+
+Generate ONE new unique post. Output ONLY the post text, no quotes or explanation.`;
+
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-5',
+      max_tokens: 256,
+      messages: [{ role: 'user', content: prompt }]
+    });
+
+    const postContent = response.content[0].text.trim().replace(/^["']|["']$/g, '');
+    const post = await db.createAgentPost(skillId, postContent.slice(0, 280));
+    
+    res.json({
+      success: true,
+      post: {
+        id: post.id,
+        content: post.content,
+        status: post.status
+      }
+    });
+  } catch (error) {
+    console.error('Error generating post:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/agents/:id/suggested-posts', async (req, res) => {
+  try {
+    const skillId = parseInt(req.params.id, 10);
+    if (isNaN(skillId)) {
+      return res.status(400).json({ success: false, error: 'Invalid skill ID' });
+    }
+    
+    const posts = await db.getSuggestedPosts(skillId, 5);
+    res.json({ success: true, posts });
+  } catch (error) {
+    console.error('Error fetching suggested posts:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/agents/:id/posts/:postId/mark', async (req, res) => {
+  try {
+    const skillId = parseInt(req.params.id, 10);
+    const postId = parseInt(req.params.postId, 10);
+    if (isNaN(skillId) || isNaN(postId)) {
+      return res.status(400).json({ success: false, error: 'Invalid IDs' });
+    }
+    
+    const { status, moltbookPostId, moltbookPostUrl } = req.body;
+    if (!['posted', 'rejected'].includes(status)) {
+      return res.status(400).json({ success: false, error: 'Status must be posted or rejected' });
+    }
+    
+    const updated = await db.updateAgentPostStatus(postId, status, moltbookPostId, moltbookPostUrl);
+    
+    if (status === 'posted') {
+      await db.markAgentLastPost(skillId);
+    }
+    
+    res.json({ success: true, post: updated });
+  } catch (error) {
+    console.error('Error marking post:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/agents/regenerate/:tokenId', async (req, res) => {
+  try {
+    const tokenId = parseInt(req.params.tokenId, 10);
+    if (isNaN(tokenId)) {
+      return res.status(400).json({ success: false, error: 'Invalid token ID' });
+    }
+    
+    const token = await db.getToken(tokenId);
+    if (!token) {
+      return res.status(404).json({ success: false, error: 'Token not found' });
+    }
+    
+    const existingSkill = await db.getAgentSkillByTokenId(tokenId);
+    if (existingSkill && existingSkill.status !== 'unclaimed') {
+      return res.status(400).json({ success: false, error: 'Cannot regenerate claimed agent' });
+    }
+    
+    // Delete existing skill if unclaimed
+    if (existingSkill) {
+      await db.query('DELETE FROM agent_skills WHERE id = $1', [existingSkill.id]);
+    }
+    
+    const blueprint = { narrative: token.narrative || '', description: token.description };
+    const skillData = await generateAgentSkill(token, blueprint);
+    const newSkill = await db.createAgentSkill(tokenId, skillData);
+    
+    res.json({
+      success: true,
+      skill: {
+        id: newSkill.id,
+        archetype: newSkill.archetype,
+        voice: newSkill.voice,
+        topics: newSkill.topics,
+        quirks: newSkill.quirks,
+        samplePosts: newSkill.sample_posts,
+        introPost: newSkill.intro_post,
+        status: newSkill.status
+      }
+    });
+  } catch (error) {
+    console.error('Error regenerating agent:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
