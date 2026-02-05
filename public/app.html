@@ -1198,6 +1198,116 @@
             color: var(--success);
         }
 
+        .venue-selection {
+            margin-top: 24px;
+            text-align: left;
+        }
+
+        .venue-section-title {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1rem;
+            margin-bottom: 16px;
+            color: var(--text-primary);
+        }
+
+        .venue-chain-section {
+            margin-bottom: 16px;
+        }
+
+        .venue-chain-header {
+            margin-bottom: 8px;
+        }
+
+        .chain-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .chain-badge.solana { background: linear-gradient(135deg, #9945FF, #14F195); color: white; }
+        .chain-badge.base { background: linear-gradient(135deg, #0052FF, #3366FF); color: white; }
+        .chain-badge.bnb { background: linear-gradient(135deg, #F3BA2F, #F0B90B); color: #1E2026; }
+
+        .venue-cards {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .venue-card {
+            flex: 1;
+            min-width: 140px;
+            background: var(--bg-tertiary);
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            padding: 16px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: center;
+        }
+
+        .venue-card.active-venue:hover {
+            border-color: var(--primary);
+            transform: translateY(-2px);
+        }
+
+        .venue-card.selected {
+            border-color: var(--primary);
+            background: rgba(255, 68, 68, 0.1);
+        }
+
+        .venue-card.coming-soon {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .venue-logo {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            object-fit: contain;
+            margin-bottom: 8px;
+        }
+
+        .venue-info {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .venue-name {
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .venue-status {
+            font-size: 0.7rem;
+            padding: 2px 8px;
+            border-radius: 8px;
+            display: inline-block;
+        }
+
+        .venue-status.active {
+            background: rgba(0, 255, 136, 0.2);
+            color: var(--success);
+        }
+
+        .venue-status.coming-soon {
+            background: rgba(255, 170, 0, 0.2);
+            color: var(--warning);
+        }
+
+        .venue-fee {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            margin-top: 8px;
+        }
+
         .blueprint-panel {
             background: var(--bg-secondary);
             border: 1px solid var(--border-color);
@@ -1949,7 +2059,7 @@
             <div id="page-create" class="page active">
                 <div class="page-header">
                     <h1 class="page-title">Create Your Token</h1>
-                    <p class="page-subtitle">Launch on pump.fun and get a unique Moltbook AI agent, automatically</p>
+                    <p class="page-subtitle">Launch on Solana, Base, or BNB Chain and get a unique Moltbook AI agent, automatically</p>
                 </div>
 
                 <div id="createStep1" class="create-step">
@@ -1959,8 +2069,67 @@
                                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
                             </svg>
                         </div>
-                        <h2>Describe Your Token Idea</h2>
-                        <p>Tell the AI what kind of memecoin you want. Your token launches on pump.fun and spawns a unique AI agent for Moltbook.</p>
+                        <h2>Launch Your Token</h2>
+                        <p>Choose your platform, describe your idea, and let AI do the rest. Supports Solana, Base, and BNB Chain.</p>
+                        
+                        <div class="venue-selection">
+                            <h3 class="venue-section-title">Select Launch Platform</h3>
+                            
+                            <div class="venue-chain-section">
+                                <div class="venue-chain-header">
+                                    <span class="chain-badge solana">Solana</span>
+                                </div>
+                                <div class="venue-cards">
+                                    <div class="venue-card active-venue" data-venue="pump.fun" onclick="selectVenue('pump.fun')">
+                                        <img src="/images/venues/pump-fun.svg" alt="pump.fun" class="venue-logo">
+                                        <div class="venue-info">
+                                            <span class="venue-name">pump.fun</span>
+                                            <span class="venue-status active">Active</span>
+                                        </div>
+                                        <div class="venue-fee">1% fee → automated buyback & burn</div>
+                                    </div>
+                                    <div class="venue-card active-venue" data-venue="bags.fm" onclick="selectVenue('bags.fm')">
+                                        <img src="/images/venues/bags-fm.svg" alt="bags.fm" class="venue-logo">
+                                        <div class="venue-info">
+                                            <span class="venue-name">bags.fm</span>
+                                            <span class="venue-status active">Active</span>
+                                        </div>
+                                        <div class="venue-fee">1% fee → automated buyback & burn</div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="venue-chain-section">
+                                <div class="venue-chain-header">
+                                    <span class="chain-badge base">Base</span>
+                                </div>
+                                <div class="venue-cards">
+                                    <div class="venue-card coming-soon" data-venue="clanker">
+                                        <img src="/images/venues/clanker.svg" alt="Clanker" class="venue-logo">
+                                        <div class="venue-info">
+                                            <span class="venue-name">Clanker</span>
+                                            <span class="venue-status coming-soon">Coming Soon</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="venue-chain-section">
+                                <div class="venue-chain-header">
+                                    <span class="chain-badge bnb">BNB Chain</span>
+                                </div>
+                                <div class="venue-cards">
+                                    <div class="venue-card coming-soon" data-venue="four.meme">
+                                        <img src="/images/venues/four-meme.svg" alt="Four.meme" class="venue-logo">
+                                        <div class="venue-info">
+                                            <span class="venue-name">Four.meme</span>
+                                            <span class="venue-status coming-soon">Coming Soon</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
                         <p style="color: var(--text-secondary); font-size: 0.9rem; margin-top: 16px;">You get:</p>
                         <ul class="create-features-list">
                             <li>Token name, symbol & narrative</li>
@@ -1969,11 +2138,11 @@
                             <li>Unique Moltbook AI agent</li>
                             <li>Auto buyback & burn</li>
                         </ul>
-                        <button class="btn btn-primary" onclick="startChatCreation()" style="margin-top: 24px;">
+                        <button class="btn btn-primary" id="startChatBtn" onclick="startChatCreation()" style="margin-top: 24px;" disabled>
                             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
                             </svg>
-                            Start Chat with AI
+                            Select a Platform to Continue
                         </button>
                     </div>
                 </div>
@@ -2329,13 +2498,18 @@
 
         async function createSession() {
             try {
-                const res = await fetch('/api/session/create', { method: 'POST' });
+                const res = await fetch('/api/session/create', { 
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ venue: selectedVenue || 'pump.fun' })
+                });
                 const data = await res.json();
                 if (data.success) {
                     currentSession = {
                         id: data.sessionId,
                         depositAddress: data.depositAddress,
-                        requiredAmount: data.requiredAmount
+                        requiredAmount: data.requiredAmount,
+                        venue: data.venue || selectedVenue
                     };
                     localStorage.setItem('clawp_session', JSON.stringify(currentSession));
                     return currentSession;
@@ -3049,7 +3223,36 @@
             `;
         }
 
+        let selectedVenue = null;
+
+        function selectVenue(venue) {
+            selectedVenue = venue;
+            
+            document.querySelectorAll('.venue-card').forEach(card => {
+                card.classList.remove('selected');
+            });
+            
+            const selectedCard = document.querySelector(`.venue-card[data-venue="${venue}"]`);
+            if (selectedCard) {
+                selectedCard.classList.add('selected');
+            }
+            
+            const btn = document.getElementById('startChatBtn');
+            btn.disabled = false;
+            btn.innerHTML = `
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+                Start Chat with AI (${venue})
+            `;
+        }
+
         function startChatCreation() {
+            if (!selectedVenue) {
+                alert('Please select a launch platform first');
+                return;
+            }
+            
             const step1 = document.getElementById('createStep1');
             const step2 = document.getElementById('createStep2');
             
