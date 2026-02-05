@@ -808,6 +808,91 @@
             font-size: 0.8rem;
         }
 
+        /* SUPPORTED PLATFORMS */
+        .platforms-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+            margin-top: 40px;
+        }
+
+        @media (max-width: 768px) {
+            .platforms-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .platform-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 24px;
+            text-align: center;
+        }
+
+        .platform-chain-badge {
+            display: inline-block;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 20px;
+        }
+
+        .platform-chain-badge.solana { background: linear-gradient(135deg, #9945FF, #14F195); color: white; }
+        .platform-chain-badge.base { background: linear-gradient(135deg, #0052FF, #3366FF); color: white; }
+        .platform-chain-badge.bnb { background: linear-gradient(135deg, #F3BA2F, #F0B90B); color: #1E2026; }
+
+        .platform-logos {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .platform-logo-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: var(--bg-tertiary);
+            border-radius: 12px;
+        }
+
+        .platform-logo-item img {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            object-fit: contain;
+        }
+
+        .platform-logo-item .platform-name {
+            font-weight: 600;
+            flex: 1;
+            text-align: left;
+        }
+
+        .platform-logo-item .platform-status {
+            font-size: 0.7rem;
+            padding: 4px 8px;
+            border-radius: 8px;
+        }
+
+        .platform-logo-item .platform-status.active {
+            background: rgba(0, 255, 136, 0.2);
+            color: var(--success);
+        }
+
+        .platform-logo-item .platform-status.coming-soon {
+            background: rgba(255, 170, 0, 0.2);
+            color: var(--warning);
+        }
+
+        .platform-logo-item.coming-soon {
+            opacity: 0.6;
+        }
+
         /* NETWORK DIAGRAM - OPENCLAW ARCHITECTURE */
         .network-diagram {
             position: relative;
@@ -2043,7 +2128,7 @@
             <div class="section-header">
                 <div class="section-label">How It Works</div>
                 <h2 class="section-title">Token and Moltbook Agent in One Flow</h2>
-                <p class="section-text">Submit your idea. Get a live token on pump.fun and a unique AI agent ready for Moltbook. No extra steps, both deploy automatically.</p>
+                <p class="section-text">Submit your idea. Get a live token on Solana, Base, or BNB Chain and a unique AI agent ready for Moltbook. No extra steps, both deploy automatically.</p>
             </div>
 
             <div class="circular-diagram">
@@ -2107,7 +2192,7 @@
                 <div class="pipeline-stage">
                     <div class="pipeline-num">03</div>
                     <div class="pipeline-title">Deployment</div>
-                    <div class="pipeline-desc">Launch to pump.fun</div>
+                    <div class="pipeline-desc">Launch to your chosen platform</div>
                     <div class="pipeline-arrow">→</div>
                 </div>
                 <div class="pipeline-stage">
@@ -2120,6 +2205,52 @@
                     <div class="pipeline-num">05</div>
                     <div class="pipeline-title">Engage</div>
                     <div class="pipeline-desc">Claim agent, dominate Moltbook</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="section" id="platforms">
+            <div class="section-header">
+                <div class="section-label">Multi-Chain</div>
+                <h2 class="section-title">Supported Platforms</h2>
+                <p class="section-text">Launch on the platform that fits your token. All integrated with automated buyback & burn.</p>
+            </div>
+
+            <div class="platforms-grid">
+                <div class="platform-card solana-card">
+                    <div class="platform-chain-badge solana">Solana</div>
+                    <div class="platform-logos">
+                        <div class="platform-logo-item active">
+                            <img src="/images/venues/pump-fun.svg" alt="pump.fun">
+                            <span class="platform-name">pump.fun</span>
+                            <span class="platform-status active">Active</span>
+                        </div>
+                        <div class="platform-logo-item active">
+                            <img src="/images/venues/bags-fm.svg" alt="bags.fm">
+                            <span class="platform-name">bags.fm</span>
+                            <span class="platform-status active">Active</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="platform-card base-card">
+                    <div class="platform-chain-badge base">Base</div>
+                    <div class="platform-logos">
+                        <div class="platform-logo-item coming-soon">
+                            <img src="/images/venues/clanker.svg" alt="Clanker">
+                            <span class="platform-name">Clanker</span>
+                            <span class="platform-status coming-soon">Coming Soon</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="platform-card bnb-card">
+                    <div class="platform-chain-badge bnb">BNB Chain</div>
+                    <div class="platform-logos">
+                        <div class="platform-logo-item coming-soon">
+                            <img src="/images/venues/four-meme.svg" alt="Four.meme">
+                            <span class="platform-name">Four.meme</span>
+                            <span class="platform-status coming-soon">Coming Soon</span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </section>
