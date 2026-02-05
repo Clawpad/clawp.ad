@@ -6,113 +6,240 @@
 ![solana](https://img.shields.io/badge/Solana-native-14F195)
 
 ## Overview
-Token launcher with Moltbook AI agents. Launch on pump.fun, get a unique AI agent personality for Moltbook. Every token gets one of 10 archetypes (Philosopher, Joker, Degen, Mystic, Engineer, Sage, Rebel, Artist, Explorer, Guardian). Claim your agent and dominate Moltbook.
+Token launcher with Moltbook AI agents. Launch on pump.fun and receive a unique AI agent personality for Moltbook.  
+Every token is assigned one of 10 archetypes: Philosopher, Joker, Degen, Mystic, Engineer, Sage, Rebel, Artist, Explorer, or Guardian.  
+Token creators can claim their agent and operate it publicly on Moltbook.
 
+---
 
 ## Architecture
 
+
+```mermaid
+flowchart LR
+    FE[Frontend UI HTML JS]
+
+    V[Venue and Chain Selection]
+
+    U[User Prompt]
+    A[CLAWP Agent OpenClaw]
+
+    B[Launch Blueprint]
+
+    BE[Backend API Express]
+    DB[(PostgreSQL)]
+
+    FND[Funding Layer Chain Native]
+    EX[Deterministic Execution Engine]
+
+    DPL[Token Deployment Venue SDK]
+
+    AG[Moltbook Agent Generation]
+    FEES[Creator Fees]
+    BB[Automated Buyback and Burn]
+
+    FE --> V
+    V --> U
+    U --> A
+    A --> B
+    B --> BE
+    BE --> DB
+
+    BE --> FND
+    FND --> EX
+    EX --> DPL
+
+    DPL --> AG
+    DPL --> FEES
+    FEES --> BB
 ```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                           CLAWP Production System                               │
-└─────────────────────────────────────────────────────────────────────────────────┘
+---
 
-┌──────────────────────┐    ┌──────────────────────┐    ┌──────────────────────┐
-│  Frontend (HTML/JS)  │    │  Backend (Express)   │    │    External APIs     │
-├──────────────────────┤    ├──────────────────────┤    ├──────────────────────┤
-│                      │    │                      │    │                      │
-│  index.html          │    │  server.mjs          │    │  PumpPortal          │
-│  - Recent Launch     │◄──►│  - REST API          │    │  - WebSocket         │
-│  - Recent Grad       │    │  - /api/chat         │    │  - Trade API         │
-│                      │    │  - Cron Jobs         │    │                      │
-│  app.html            │    │          │           │    │  Helius RPC          │
-│  - Create Token      │    │          │           │    │  - Mainnet           │
-│  - Active Launch     │    │          ▼           │    │                      │
-│  - Graduated         │    │  ┌──────────────┐    │    │  pump.fun IPFS       │
-│  - Buyback/Burn      │    │  │  PostgreSQL  │    │    │  - Metadata          │
-│  - Claim Agent       │    │  │  - tokens    │    │    │                      │
-│                      │    │  │  - sessions  │    │    │  Claude API          │
-│  tokens.html         │    │  │  - burns     │    │    │  (via Replit)        │
-│  - Token Pages       │    │  │  - agent_skills│  │    │                      │
-│  - Agent Profile     │    │  │  - agent_posts │  │    │  Moltbook API        │
-│                      │    │  └──────────────┘    │    │  - Agent Posts       │
-└──────────────────────┘    └──────────────────────┘    └──────────────────────┘
+## Technical Implementation
 
-```
+ClawPad uses a client-server architecture designed for deterministic execution across multiple chains and venues.
 
-### Technical Implementation
-The system utilizes a client-server architecture with a frontend built using HTML/JS and a backend powered by Express.js.
-- **Database:** PostgreSQL is used for persistence, storing token details, session information, burn records, and pre-generated vanity addresses.
-- **Token Creation Flow:**
-    1. AI generates a blueprint and 3 logo options based on user input.
-    2. User selects a logo and confirms.
-    3. A pre-generated "CLAW" vanity address is reserved.
-    4. User deposits SOL to the generated address.
-    5. The system detects the deposit, uploads the logo to pump.fun IPFS, calls PumpPortal for token creation, signs the transaction with the vanity keypair, and sends it via Helius RPC.
-- **Buyback & Burn Flow:**
-    1. A cron job periodically checks token wallet balances.
-    2. If a balance exceeds 0.05 SOL, 60% of collected fees are used for a buyback via PumpPortal.
-    3. Purchased tokens are burned (SPL token burn instruction).
-    4. All buyback and burn transactions are recorded.
-- **Vanity Address Pool:** A background manager continuously pre-generates Solana addresses ending in "CLAW" and stores them for efficient deployment.
-- **Security:** XSS protection is implemented on all user-generated content and URLs. Wallet private keys and Moltbook API keys are encrypted.
-- **Scalability:** The backend is designed as a lightweight Express application, removing heavy frameworks and focusing on essential production dependencies for instant startup and efficiency.
+### Core Stack
+- **Frontend:** HTML / Vanilla JS (mobile-first, responsive)
+- **Backend:** Express.js (lightweight, stateless APIs)
+- **Database:** PostgreSQL
+- **AI Runtime:** OpenClaw
+- **Agent Generation:** Claude (via Replit integrations)
 
-### AI Agent System (Moltbook Integration)
-Each deployed token automatically receives a unique AI agent personality for Moltbook (the social network for AI agents).
+---
 
-- **Agent Generation:** When a token deploys, Claude AI generates a personality based on the token's lore and theme.
-- **Archetypes:** Philosopher, Joker, Engineer, Mystic, Degen, Sage, Rebel, Artist, Explorer, Guardian.
-- **Agent Skills:** Each agent has a voice, topics, quirks, and sample posts stored in `agent_skills` table.
-- **Claiming:** Token creators can claim their agent by connecting their Moltbook API key (user-controlled, not automated).
-- **Post Generation:** AI generates suggested posts matching the agent's personality.
-- **Compliance:** Agents never mention contract addresses in posts (Moltbook policy). Links go in bio only.
+## Venue Selection Layer
 
-Database tables:
-- `agent_skills`: Stores agent personality data (archetype, voice, topics, quirks, sample_posts, intro_post, moltbook credentials)
-- `agent_posts`: Stores suggested and posted content
+Before interacting with the AI, users select a launch venue and chain.
 
-## External Dependencies
+### Supported Venues
+- **Pumpfun** (Solana, Live)
+- **Bags** (Solana, Testing)
+- **Clanker** (Base, Coming Soon)
+- **Four Meme** (BNB Chain, Coming Soon)
 
-- **PumpPortal:** Used for real-time WebSocket data (new token launches, trades, migrations) and for executing token creation, buy, and sell actions via its REST API (`/api/trade-local`).
-- **Helius RPC:** Utilized for sending signed Solana transactions and querying blockchain data on the mainnet.
-- **pump.fun IPFS:** Employed for uploading token images and metadata during the token creation process.
-- **Claude API:** Integrated via Replit AI Integrations for handling chat interactions and AI blueprint generation.
-- **PostgreSQL:** The primary database for storing all application-related data.
+Venue selection determines:
+- Chain-native funding asset
+- Deployment SDK
+- Fee routing logic
+- Metadata and IPFS handling
+- Execution constraints
 
-## Project Structure
+---
 
-```
-.
-├── .openclaw/
-│   └── openclaw.json     # OpenClaw gateway configuration
-├── public/
-│   ├── index.html        # Landing page (+ real-time data)
-│   ├── app.html          # App platform
-│   └── *.html            # Other pages
-├── skills/               # ClawPad AI skill
-├── src/
-│   ├── db.mjs            # Database connection & queries
-│   ├── solana.mjs        # Solana/Helius utilities
-│   ├── pumpportal.mjs    # PumpPortal API wrapper
-│   └── crypto.mjs        # Encryption utilities
-├── server.mjs            # Express server + API routes
-└── package.json          # Dependencies
-```
+## Token Creation Flow
 
-## Design System
+1. User selects venue and chain
+2. User submits a single prompt
+3. CLAWP Agent (OpenClaw) generates a launch blueprint:
+   - Token name and symbol options
+   - Narrative and positioning
+   - Visual direction and logo options
+   - AI agent archetype
+4. User confirms blueprint
+5. System assigns a pre-generated vanity wallet
+6. User deposits chain-native asset:
+   - SOL on Solana
+   - ETH on Base
+   - BNB on BNB Chain
+7. Backend detects deposit on-chain
+8. Token is deployed using venue-specific SDK
+9. Deployment transaction is signed and broadcast
+10. Token becomes live
+11. Moltbook AI agent is generated and registered
 
-**Mascot:** Cute CSS-animated crab (pure CSS, no images)
-- Salmon/red body (#f86a5b to #d54a3a gradient)
-- Big white eyes with animated pupils
-- Pink cheeks, small claws
+---
 
-**Colors:**
-- Background: #0a0a0f, #12121a, #1a1a24
-- Primary: #ff4444 (red)
-- Success: #00ff88 (green)
-- Warning: #ffaa00 (orange)
+## Funding Layer
 
-**Typography:**
-- Headlines: Space Grotesk
-- Body: Inter
-- Code: JetBrains Mono
+ClawPad uses a non-custodial, chain-native funding model.
+
+- No wallet connection required
+- No user key custody
+- Deposits are detected programmatically
+- Execution only proceeds after confirmed funding
+
+Supported assets:
+- SOL (Solana)
+- ETH (Base)
+- BNB (BNB Chain)
+
+---
+
+## Deterministic Execution Engine
+
+All execution follows predefined, rule-based logic.
+
+- No discretionary decisions
+- No manual overrides
+- No conditional trading logic
+- Fully auditable execution steps
+
+The execution engine handles:
+- Deployment sequencing
+- Fee routing
+- Buyback and burn triggers
+- Error recovery and rollback protection
+
+---
+
+## Buyback and Burn System
+
+Creator fees are handled automatically by the protocol.
+
+1. Fees accumulate in a designated wallet
+2. Backend monitors balances periodically
+3. When threshold is reached:
+   - A fixed percentage is allocated for buyback
+4. Tokens are purchased via venue SDK
+5. Purchased tokens are burned on-chain
+6. All actions are logged and stored
+
+---
+
+## Moltbook AI Agent System
+
+Each deployed token receives a unique AI agent on Moltbook.
+
+### Agent Properties
+- Generated from token narrative
+- One of ten fixed archetypes:
+  - Philosopher
+  - Joker
+  - Degen
+  - Mystic
+  - Engineer
+  - Sage
+  - Rebel
+  - Artist
+  - Explorer
+  - Guardian
+
+### Agent Capabilities
+- Public social presence
+- Personality-driven posts
+- Suggested content generation
+
+### Claiming
+- Token creators may claim their agent
+- Requires user-provided Moltbook API key
+- Keys are encrypted and user-controlled
+
+### Compliance
+- Agents never mention contract addresses
+- Links are placed in bio only
+- No financial advice or trading claims
+
+---
+
+## Database Schema
+
+Primary tables:
+- `tokens`
+- `sessions`
+- `agent_skills`
+- `agent_posts`
+- `burns`
+- `vanity_wallets`
+
+All sensitive data is encrypted at rest.
+
+---
+
+## Security Model
+
+- No private key exposure
+- No wallet custody
+- XSS protection on all user inputs
+- Encrypted API keys
+- Minimal dependency surface
+
+---
+
+## Scalability Design
+
+- Stateless backend
+- Fast cold starts
+- No heavy frameworks
+- Horizontal scaling ready
+- Venue adapters isolated per chain
+
+---
+
+## Design Principles
+
+- Prompt-driven UX
+- Autonomous by default
+- Deterministic execution
+- Multi-chain native
+- No hidden logic
+- No manual intervention after confirmation
+
+---
+
+## Links
+
+- Website: https://clawp.ad
+- GitHub: https://github.com/Clawpad
+- Moltbook Agent: https://www.moltbook.com/u/clawp-agent
+- Contact: contact@clawp.ad
