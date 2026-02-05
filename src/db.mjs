@@ -10,12 +10,12 @@ export async function query(text, params) {
   return result;
 }
 
-export async function createSession(blueprint, depositAddress, walletPrivateKeyEncrypted = null) {
+export async function createSession(blueprint, depositAddress, walletPrivateKeyEncrypted = null, venue = 'pump.fun') {
   const result = await query(
-    `INSERT INTO sessions (blueprint, deposit_address, wallet_private_key_encrypted, status)
-     VALUES ($1, $2, $3, 'pending')
+    `INSERT INTO sessions (blueprint, deposit_address, wallet_private_key_encrypted, status, venue)
+     VALUES ($1, $2, $3, 'pending', $4)
      RETURNING *`,
-    [JSON.stringify(blueprint), depositAddress, walletPrivateKeyEncrypted]
+    [JSON.stringify(blueprint), depositAddress, walletPrivateKeyEncrypted, venue]
   );
   return result.rows[0];
 }
@@ -56,8 +56,8 @@ export async function createToken(data) {
   const result = await query(
     `INSERT INTO tokens (
       mint_address, name, symbol, description, image_url, metadata_uri,
-      wallet_public_key, wallet_private_key_encrypted, status, website_url, twitter_url
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      wallet_public_key, wallet_private_key_encrypted, status, website_url, twitter_url, venue
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
     RETURNING *`,
     [
       data.mintAddress,
@@ -70,7 +70,8 @@ export async function createToken(data) {
       data.walletPrivateKeyEncrypted,
       data.status || 'active',
       data.websiteUrl || null,
-      data.twitterUrl || null
+      data.twitterUrl || null,
+      data.venue || 'pump.fun'
     ]
   );
   return result.rows[0];
