@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="base:app_id" content="6985d2cf8dcaa0daf5755f8a" />
     <title>ClawPad - Autonomous Token Launcher</title>
     <link rel="icon" type="image/png" href="/logo.png">
     <link rel="preload" href="/logo.png" as="image" type="image/png">
@@ -293,7 +294,7 @@
         .hero-tagline-wrapper {
             position: relative;
             height: 2rem;
-            margin-bottom: 32px;
+            margin-bottom: 12px;
             overflow: hidden;
         }
 
@@ -322,8 +323,8 @@
         .hero .description {
             font-size: 1.15rem;
             color: var(--text-secondary);
-            max-width: 700px;
-            margin: 0 auto 48px;
+            max-width: 900px;
+            margin: -10px auto 48px;
             line-height: 1.8;
         }
 
@@ -830,41 +831,65 @@
             text-align: center;
         }
 
-        .platform-chain-badge {
-            display: inline-block;
-            padding: 6px 16px;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 20px;
+        .platform-chain-header {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            margin-bottom: 24px;
+            padding: 20px 0;
         }
 
-        .platform-chain-badge.solana { background: linear-gradient(135deg, #9945FF, #14F195); color: white; }
-        .platform-chain-badge.base { background: linear-gradient(135deg, #0052FF, #3366FF); color: white; }
-        .platform-chain-badge.bnb { background: linear-gradient(135deg, #F3BA2F, #F0B90B); color: #1E2026; }
+        .chain-logo {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            object-fit: contain;
+            background: rgba(255,255,255,0.05);
+            padding: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+
+        .platform-chain-badge {
+            display: inline-block;
+            padding: 8px 20px;
+            border-radius: 24px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .platform-chain-badge.solana { background: linear-gradient(135deg, #9945FF, #14F195); color: white; box-shadow: 0 4px 15px rgba(153, 69, 255, 0.4); }
+        .platform-chain-badge.base { background: linear-gradient(135deg, #0052FF, #3366FF); color: white; box-shadow: 0 4px 15px rgba(0, 82, 255, 0.4); }
+        .platform-chain-badge.bnb { background: linear-gradient(135deg, #F3BA2F, #F0B90B); color: #1E2026; box-shadow: 0 4px 15px rgba(243, 186, 47, 0.4); }
 
         .platform-logos {
             display: flex;
             flex-direction: column;
             gap: 16px;
+            margin-top: 20px;
         }
 
         .platform-logo-item {
-            display: flex;
+            display: flex !important;
             align-items: center;
             gap: 12px;
             padding: 12px;
             background: var(--bg-tertiary);
             border-radius: 12px;
+            min-height: 64px;
         }
 
         .platform-logo-item img {
             width: 40px;
             height: 40px;
+            min-width: 40px;
+            min-height: 40px;
             border-radius: 8px;
             object-fit: contain;
+            background: var(--bg-tertiary);
         }
 
         .platform-logo-item .platform-name {
@@ -893,12 +918,12 @@
             opacity: 0.6;
         }
 
-        /* NETWORK DIAGRAM - OPENCLAW ARCHITECTURE */
+        /* NETWORK DIAGRAM - ECOSYSTEM */
         .network-diagram {
             position: relative;
             width: 100%;
-            max-width: 600px;
-            height: 500px;
+            max-width: 700px;
+            height: 520px;
             margin: 60px auto;
         }
 
@@ -910,7 +935,7 @@
             width: 140px;
             height: 140px;
             border-radius: 50%;
-            background: radial-gradient(circle, rgba(255,68,68,0.3) 0%, rgba(255,68,68,0.05) 70%, transparent 100%);
+            background: radial-gradient(circle, rgba(255,68,68,0.25) 0%, rgba(255,68,68,0.05) 70%, transparent 100%);
             border: 2px solid var(--primary);
             display: flex;
             flex-direction: column;
@@ -921,12 +946,8 @@
         }
 
         @keyframes networkCenterPulse {
-            0%, 100% { 
-                box-shadow: 0 0 40px var(--primary-glow), 0 0 80px rgba(255,68,68,0.2);
-            }
-            50% { 
-                box-shadow: 0 0 60px var(--primary-glow), 0 0 120px rgba(255,68,68,0.3), 0 0 160px rgba(255,68,68,0.1);
-            }
+            0%, 100% { box-shadow: 0 0 40px var(--primary-glow), 0 0 80px rgba(255,68,68,0.15); }
+            50% { box-shadow: 0 0 60px var(--primary-glow), 0 0 120px rgba(255,68,68,0.25); }
         }
 
         .network-center-logo {
@@ -946,7 +967,7 @@
         }
 
         .network-center-sub {
-            font-size: 0.7rem;
+            font-size: 0.65rem;
             color: var(--primary);
             margin-top: 4px;
             opacity: 0.8;
@@ -956,21 +977,22 @@
             position: absolute;
             top: 50%;
             left: 50%;
-            border: 1px solid rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.05);
             border-radius: 50%;
             transform: translate(-50%, -50%);
         }
 
         .network-orbit-1 {
-            width: 280px;
-            height: 280px;
-            animation: orbitSpin 40s linear infinite;
+            width: 300px;
+            height: 300px;
+            border: 1px dashed rgba(255,255,255,0.06);
+            animation: orbitSpin 50s linear infinite;
         }
 
         .network-orbit-2 {
-            width: 400px;
-            height: 400px;
-            animation: orbitSpin 60s linear infinite reverse;
+            width: 440px;
+            height: 440px;
+            animation: orbitSpin 70s linear infinite reverse;
         }
 
         @keyframes orbitSpin {
@@ -978,142 +1000,117 @@
             to { transform: translate(-50%, -50%) rotate(360deg); }
         }
 
-        .network-token {
+        .net-node {
             position: absolute;
-            width: 60px;
-            height: 60px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            z-index: 5;
+            transition: all 0.3s;
+        }
+
+        .net-node-circle {
+            width: 64px;
+            height: 64px;
             border-radius: 50%;
             background: var(--bg-secondary);
-            border: 1px solid var(--border-glow);
+            border: 1.5px solid var(--border-glow);
             display: flex;
             align-items: center;
             justify-content: center;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.65rem;
-            color: var(--text-secondary);
-            z-index: 5;
             transition: all 0.3s;
-            animation: tokenFloat 5s ease-in-out infinite;
         }
 
-        .network-token:hover {
-            border-color: var(--primary);
-            box-shadow: 0 0 20px var(--primary-glow);
-            transform: scale(1.15);
-            color: var(--text-primary);
+        .net-node-circle svg { width: 26px; height: 26px; }
+        .net-node-circle img { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; }
+
+        .net-node-name {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            letter-spacing: 0.5px;
+            white-space: nowrap;
         }
 
-        .network-token-1 { top: 0; left: 50%; transform: translateX(-50%); animation-delay: 0s; }
-        .network-token-2 { top: 20%; right: 5%; animation-delay: 0.8s; }
-        .network-token-3 { bottom: 20%; right: 5%; animation-delay: 1.6s; }
-        .network-token-4 { bottom: 0; left: 50%; transform: translateX(-50%); animation-delay: 2.4s; }
-        .network-token-5 { bottom: 20%; left: 5%; animation-delay: 3.2s; }
-        .network-token-6 { top: 20%; left: 5%; animation-delay: 4s; }
-
-        @keyframes tokenFloat {
-            0%, 100% { filter: brightness(1); }
-            50% { filter: brightness(1.2); }
+        .net-node:hover .net-node-circle {
+            transform: scale(1.12);
         }
 
-        .token-active {
-            border-color: var(--primary) !important;
-            box-shadow: 0 0 20px var(--primary-glow), 0 0 40px rgba(255, 68, 68, 0.3) !important;
-            color: var(--text-primary) !important;
-            background: linear-gradient(135deg, rgba(255, 68, 68, 0.2), rgba(255, 68, 68, 0.1)) !important;
-            animation: clawpPulse 2s ease-in-out infinite !important;
+        .net-node:hover .net-node-name { color: var(--text-primary); }
+
+        .net-node-claude { top: 2%; left: 18%; }
+        .net-node-claude .net-node-circle { border-color: rgba(204, 133, 63, 0.5); animation: nodeGlow 4s ease-in-out infinite 0s; }
+        .net-node-claude .net-node-name { color: #cc853f; }
+
+        .net-node-openai { top: 2%; right: 18%; }
+        .net-node-openai .net-node-circle { border-color: rgba(16, 163, 127, 0.5); animation: nodeGlow 4s ease-in-out infinite 1s; }
+        .net-node-openai .net-node-name { color: #10a37f; }
+
+        .net-node-moltbook { bottom: 2%; left: 18%; }
+        .net-node-moltbook .net-node-circle { border-color: rgba(99, 102, 241, 0.5); animation: nodeGlow 4s ease-in-out infinite 2s; }
+        .net-node-moltbook .net-node-name { color: #818cf8; }
+
+        .net-node-erc8004 { bottom: 2%; right: 18%; }
+        .net-node-erc8004 .net-node-circle { border-color: rgba(56, 189, 248, 0.5); animation: nodeGlow 4s ease-in-out infinite 3s; }
+        .net-node-erc8004 .net-node-name { color: #38bdf8; }
+
+        .net-node-clawp { top: 50%; left: 0; transform: translateY(-50%); }
+        .net-node-clawp .net-node-circle { 
+            border-color: var(--primary); 
+            box-shadow: 0 0 16px var(--primary-glow);
+            background: linear-gradient(135deg, rgba(255,68,68,0.15), rgba(255,68,68,0.05));
+        }
+        .net-node-clawp .net-node-circle img { width: 56px; height: 56px; }
+        .net-node-clawp .net-node-name { color: var(--primary); }
+
+        .net-node-meme { top: 50%; right: 0; transform: translateY(-50%); }
+
+        @keyframes nodeGlow {
+            0%, 100% { box-shadow: 0 0 0 transparent; }
+            50% { box-shadow: 0 0 20px rgba(255,255,255,0.08); }
         }
 
-        @keyframes clawpPulse {
-            0%, 100% { 
-                box-shadow: 0 0 20px var(--primary-glow), 0 0 40px rgba(255, 68, 68, 0.3);
-            }
-            50% { 
-                box-shadow: 0 0 30px var(--primary-glow), 0 0 60px rgba(255, 68, 68, 0.4);
-            }
-        }
-
-        .network-beam {
+        .net-connector {
             position: absolute;
             top: 50%;
             left: 50%;
-            width: 200px;
-            height: 2px;
+            height: 1.5px;
             transform-origin: left center;
             z-index: 1;
+            overflow: hidden;
         }
 
-        .network-beam::before {
+        .net-connector::after {
             content: '';
             position: absolute;
-            width: 100%;
+            width: 30px;
             height: 100%;
-            background: linear-gradient(90deg, var(--primary), transparent);
-            opacity: 0;
-            animation: beamPulse 3s ease-in-out infinite;
+            animation: dataFlow 2.5s linear infinite;
         }
 
-        .network-beam-1 { transform: rotate(0deg); }
-        .network-beam-1::before { animation-delay: 0s; }
-        .network-beam-2 { transform: rotate(60deg); }
-        .network-beam-2::before { animation-delay: 0.5s; }
-        .network-beam-3 { transform: rotate(120deg); }
-        .network-beam-3::before { animation-delay: 1s; }
-        .network-beam-4 { transform: rotate(180deg); }
-        .network-beam-4::before { animation-delay: 1.5s; }
-        .network-beam-5 { transform: rotate(240deg); }
-        .network-beam-5::before { animation-delay: 2s; }
-        .network-beam-6 { transform: rotate(300deg); }
-        .network-beam-6::before { animation-delay: 2.5s; }
+        .net-conn-claude { width: 155px; transform: rotate(-52deg); }
+        .net-conn-claude::after { background: linear-gradient(90deg, transparent, #cc853f, transparent); animation-delay: 0s; }
 
-        @keyframes beamPulse {
-            0%, 100% { opacity: 0; transform: scaleX(0); }
-            50% { opacity: 0.6; transform: scaleX(1); }
-        }
+        .net-conn-openai { width: 155px; transform: rotate(52deg); }
+        .net-conn-openai::after { background: linear-gradient(90deg, transparent, #10a37f, transparent); animation-delay: 0.5s; }
 
-        .network-label {
-            position: absolute;
-            font-size: 0.7rem;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
+        .net-conn-moltbook { width: 155px; transform: rotate(-128deg); }
+        .net-conn-moltbook::after { background: linear-gradient(90deg, transparent, #818cf8, transparent); animation-delay: 1s; }
 
-        .network-label-left {
-            left: 0;
-            top: 50%;
-            transform: translateY(-50%);
-            text-align: right;
-            width: 80px;
-        }
+        .net-conn-erc8004 { width: 155px; transform: rotate(128deg); }
+        .net-conn-erc8004::after { background: linear-gradient(90deg, transparent, #38bdf8, transparent); animation-delay: 1.5s; }
 
-        .network-label-right {
-            right: 0;
-            top: 50%;
-            transform: translateY(-50%);
-            text-align: left;
-            width: 80px;
-        }
+        .net-conn-clawp { width: 155px; transform: rotate(180deg); }
+        .net-conn-clawp::after { background: linear-gradient(90deg, transparent, var(--primary), transparent); animation-delay: 2s; }
 
-        .network-label-title {
-            color: var(--text-primary);
-            font-family: 'Space Grotesk', sans-serif;
-            font-weight: 600;
-            margin-bottom: 4px;
-        }
+        .net-conn-meme { width: 155px; transform: rotate(0deg); }
+        .net-conn-meme::after { background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent); animation-delay: 2.5s; }
 
-        .network-flow-arrow {
-            position: absolute;
-            font-size: 1.2rem;
-            color: var(--primary);
-            animation: arrowPulse 2s ease-in-out infinite;
-        }
-
-        .network-flow-arrow-left { left: 85px; top: 50%; transform: translateY(-50%); }
-        .network-flow-arrow-right { right: 85px; top: 50%; transform: translateY(-50%); }
-
-        @keyframes arrowPulse {
-            0%, 100% { opacity: 0.5; }
-            50% { opacity: 1; }
+        @keyframes dataFlow {
+            0% { left: -30px; }
+            100% { left: 100%; }
         }
 
         /* WHY SECTION */
@@ -1295,12 +1292,16 @@
             gap: 24px;
             width: max-content;
             flex-wrap: nowrap;
-            animation: marqueeSlide 20s linear infinite;
+            animation: marqueeSlide 30s linear infinite;
             padding: 10px 0;
         }
 
+        .marquee-track:hover {
+            animation-play-state: paused;
+        }
+
         .marquee-track.slow {
-            animation-duration: 30s;
+            animation-duration: 40s;
         }
 
         @keyframes marqueeSlide {
@@ -1448,19 +1449,10 @@
         /* FINAL CTA */
         .final-cta {
             text-align: center;
-            padding: 120px 0;
+            padding: 64px 0;
+            margin-top: 48px;
             position: relative;
-        }
-
-        .final-cta::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 1px;
-            height: 80px;
-            background: linear-gradient(180deg, var(--border-color), transparent);
+            border-top: 1px solid var(--border-color);
         }
 
         .final-cta h2 {
@@ -1483,7 +1475,10 @@
             display: grid;
             grid-template-columns: repeat(4, 1fr);
             gap: 16px;
-            margin-bottom: 48px;
+            margin-top: 64px;
+            margin-bottom: 64px;
+            padding-top: 48px;
+            border-top: 1px solid var(--border-color);
         }
 
         .footer-card {
@@ -1715,9 +1710,10 @@
 
         .access-channels-footer {
             text-align: center;
-            margin-top: 48px;
+            margin-top: 40px;
+            margin-bottom: 16px;
             color: var(--text-secondary);
-            font-size: 0.9rem;
+            font-size: 0.85rem;
             line-height: 1.7;
         }
 
@@ -1790,7 +1786,9 @@
             .pipeline-stage { border-radius: 12px !important; }
             .pipeline-arrow { display: none; }
             .circular-diagram { transform: scale(0.8); }
-            .network-diagram { height: 300px; }
+            .network-diagram { height: 380px; }
+            .net-node-circle { width: 56px; height: 56px; }
+            .net-node-name { font-size: 0.65rem; }
         }
 
         @media (max-width: 768px) {
@@ -1813,17 +1811,19 @@
                 height: 320px;
             }
             .network-diagram { 
-                transform: scale(0.55); 
-                height: 280px;
-                margin: 20px auto;
+                transform: scale(0.6); 
+                height: 300px;
+                margin: 10px auto;
+                transform-origin: center center;
             }
-            .network-label { font-size: 0.6rem; }
-            .network-label-left, .network-label-right { width: 60px; }
-            .network-token { width: 50px; height: 50px; font-size: 0.55rem; }
-            .network-center { width: 100px; height: 100px; }
-            .network-center-logo { width: 28px; height: 28px; }
-            .network-center-title { font-size: 0.85rem; }
+            .network-center { width: 110px; height: 110px; }
+            .network-center-logo { width: 30px; height: 30px; }
+            .network-center-title { font-size: 0.9rem; }
             .network-center-sub { font-size: 0.6rem; }
+            .net-node-circle { width: 50px; height: 50px; }
+            .net-node-circle svg { width: 20px; height: 20px; }
+            .net-node-circle img { width: 28px; height: 28px; }
+            .net-node-name { font-size: 0.6rem; }
             .footer-links { flex-wrap: wrap; gap: 20px; }
             .tokens-section .section-link { display: none; }
             .section-link-mobile { display: block; }
@@ -2088,8 +2088,8 @@
                 <span></span><span></span><span></span>
             </div>
         </div>
-        <h1 class="loading-headline">Launch tokens. Claim your Moltbook agent.</h1>
-        <p class="loading-tagline">Powered by <span>OpenClaw</span></p>
+        <h1 class="loading-headline">Launch tokens. Spawn AI agents. Verify on-chain.</h1>
+        <p class="loading-tagline">Powered by <span>OpenClaw</span>, <span>Moltbook</span>, and <span>ERC-8004</span></p>
     </div>
 
     <div class="container">
@@ -2111,24 +2111,55 @@
             </div>
             <h1 class="hero-brand">ClawPad</h1>
             <div class="hero-tagline-wrapper">
-                <p class="hero-tagline hero-tagline-1">LAUNCH TOKEN. GET AI AGENT. DOMINATE MOLTBOOK.</p>
-                <p class="hero-tagline hero-tagline-2">ONE PROMPT. FULL EXECUTION.</p>
-                <p class="hero-tagline hero-tagline-3">EVERY TOKEN GETS ITS OWN MOLTBOOK PERSONALITY.</p>
+                <p class="hero-tagline hero-tagline-2">Moltbook presence with ERC-8004 verified identity.</p>
+                <p class="hero-tagline hero-tagline-3">One prompt. Your token and AI agent, live.</p>
             </div>
             <p class="description">
-                Every token you launch gets a unique AI agent personality for Moltbook.<br>
-                Submit an idea. ClawPad deploys your token and spawns an AI agent ready to engage on Moltbook autonomously.
+                One prompt, multi-chain token launcher powered by OpenClaw, Claude, and OpenAI.<br>
+                Every token gets a Moltbook AI agent for social presence and an ERC-8004 verified on-chain identity.
             </p>
             <div class="hero-cta">
                 <a href="/app" class="btn btn-primary">CLAWP AGENT</a>
             </div>
         </section>
 
+    </div>
+
+    <section class="marquee-section" id="recently-launched">
+        <div class="marquee-section-header">
+            <div>
+                <h2 class="section-title">Recently launched</h2>
+                <p class="section-subtext">Live tokens currently operating under ClawPad automation.</p>
+            </div>
+            <a href="/app#active" class="section-link">View All →</a>
+        </div>
+        <div class="marquee-viewport">
+            <div class="marquee-track" id="activeTokens"></div>
+        </div>
+        <a href="/app#active" class="section-link-mobile">View All →</a>
+    </section>
+
+    <section class="marquee-section">
+        <div class="marquee-section-header">
+            <div>
+                <h2 class="section-title">Recently graduated</h2>
+                <p class="section-subtext">Tokens that have completed their initial launch phase and continue operating autonomously.</p>
+            </div>
+            <a href="/app#graduated" class="section-link">View All →</a>
+        </div>
+        <div class="marquee-viewport">
+            <div class="marquee-track slow" id="graduatedTokens"></div>
+        </div>
+        <a href="/app#graduated" class="section-link-mobile">View All →</a>
+    </section>
+
+    <div class="container">
+
         <section class="section">
             <div class="section-header">
                 <div class="section-label">How It Works</div>
-                <h2 class="section-title">Token and Moltbook Agent in One Flow</h2>
-                <p class="section-text">Submit your idea. Get a live token on Solana, Base, or BNB Chain and a unique AI agent ready for Moltbook. No extra steps, both deploy automatically.</p>
+                <h2 class="section-title">From Prompt to Verified Agent</h2>
+                <p class="section-text">Describe your idea to the CLAWP Agent. Get a live token, a Moltbook AI agent, and an ERC-8004 verified identity on Base.</p>
             </div>
 
             <div class="circular-diagram">
@@ -2203,8 +2234,8 @@
                 </div>
                 <div class="pipeline-stage">
                     <div class="pipeline-num">05</div>
-                    <div class="pipeline-title">Engage</div>
-                    <div class="pipeline-desc">Claim agent, dominate Moltbook</div>
+                    <div class="pipeline-title">ERC-8004 Identity</div>
+                    <div class="pipeline-desc">On-chain verified on 8004scan.io</div>
                 </div>
             </div>
         </section>
@@ -2218,35 +2249,44 @@
 
             <div class="platforms-grid">
                 <div class="platform-card solana-card">
-                    <div class="platform-chain-badge solana">Solana</div>
+                    <div class="platform-chain-header">
+                        <img src="/images/venues/solana.png?v=4" alt="Solana" class="chain-logo">
+                        <div class="platform-chain-badge solana">Solana</div>
+                    </div>
                     <div class="platform-logos">
                         <div class="platform-logo-item active">
-                            <img src="/images/venues/pump-fun.svg" alt="pump.fun">
+                            <img src="/images/venues/pump-fun.png?v=3" alt="pump.fun">
                             <span class="platform-name">pump.fun</span>
                             <span class="platform-status active">Active</span>
                         </div>
                         <div class="platform-logo-item active">
-                            <img src="/images/venues/bags-fm.svg" alt="bags.fm">
+                            <img src="/images/venues/bags-fm.png?v=3" alt="bags.fm">
                             <span class="platform-name">bags.fm</span>
                             <span class="platform-status active">Active</span>
                         </div>
                     </div>
                 </div>
                 <div class="platform-card base-card">
-                    <div class="platform-chain-badge base">Base</div>
+                    <div class="platform-chain-header">
+                        <img src="/images/venues/base.png?v=3" alt="Base" class="chain-logo">
+                        <div class="platform-chain-badge base">Base</div>
+                    </div>
                     <div class="platform-logos">
-                        <div class="platform-logo-item coming-soon">
-                            <img src="/images/venues/clanker.svg" alt="Clanker">
+                        <div class="platform-logo-item">
+                            <img src="/images/venues/clanker.png?v=3" alt="Clanker">
                             <span class="platform-name">Clanker</span>
-                            <span class="platform-status coming-soon">Coming Soon</span>
+                            <span class="platform-status active">Active</span>
                         </div>
                     </div>
                 </div>
                 <div class="platform-card bnb-card">
-                    <div class="platform-chain-badge bnb">BNB Chain</div>
+                    <div class="platform-chain-header">
+                        <img src="/images/venues/bnb.png?v=3" alt="BNB Chain" class="chain-logo">
+                        <div class="platform-chain-badge bnb">BNB Chain</div>
+                    </div>
                     <div class="platform-logos">
                         <div class="platform-logo-item coming-soon">
-                            <img src="/images/venues/four-meme.svg" alt="Four.meme">
+                            <img src="/images/venues/four-meme.png?v=3" alt="Four.meme">
                             <span class="platform-name">Four.meme</span>
                             <span class="platform-status coming-soon">Coming Soon</span>
                         </div>
@@ -2257,78 +2297,73 @@
 
     </div>
 
-    <section class="marquee-section" id="recently-launched">
-        <div class="marquee-section-header">
-            <div>
-                <h2 class="section-title">Recently launched</h2>
-                <p class="section-subtext">Live tokens currently operating under ClawPad automation.</p>
-            </div>
-            <a href="/app#active" class="section-link">View All →</a>
-        </div>
-        <div class="marquee-viewport">
-            <div class="marquee-track" id="activeTokens"></div>
-        </div>
-        <a href="/app#active" class="section-link-mobile">View All →</a>
-    </section>
-
-    <section class="marquee-section">
-        <div class="marquee-section-header">
-            <div>
-                <h2 class="section-title">Recently graduated</h2>
-                <p class="section-subtext">Tokens that have completed their initial launch phase and continue operating autonomously.</p>
-            </div>
-            <a href="/app#graduated" class="section-link">View All →</a>
-        </div>
-        <div class="marquee-viewport">
-            <div class="marquee-track slow" id="graduatedTokens"></div>
-        </div>
-        <a href="/app#graduated" class="section-link-mobile">View All →</a>
-    </section>
-
     <div class="container">
 
         <section class="section">
             <div class="section-header">
                 <div class="section-label">Technology</div>
-                <h2 class="section-title">OpenClaw and Moltbook Integration</h2>
-                <p class="section-text">ClawPad runs on OpenClaw, spawning unique AI agents for every token. Claim your agent and engage on Moltbook with AI-powered personality.</p>
+                <h2 class="section-title">OpenClaw, Moltbook, and ERC-8004</h2>
+                <p class="section-text">OpenClaw orchestrates the AI through Claude and OpenAI. Moltbook provides the social layer. ERC-8004 anchors identity on-chain. Every agent gets a verified ERC-721 NFT on Base, visible on 8004scan.io.</p>
             </div>
 
             <div class="network-diagram">
                 <div class="network-orbit network-orbit-2"></div>
                 <div class="network-orbit network-orbit-1"></div>
-                
-                <div class="network-beam network-beam-1"></div>
-                <div class="network-beam network-beam-2"></div>
-                <div class="network-beam network-beam-3"></div>
-                <div class="network-beam network-beam-4"></div>
-                <div class="network-beam network-beam-5"></div>
-                <div class="network-beam network-beam-6"></div>
-                
+
+                <div class="net-connector net-conn-claude"></div>
+                <div class="net-connector net-conn-openai"></div>
+                <div class="net-connector net-conn-moltbook"></div>
+                <div class="net-connector net-conn-erc8004"></div>
+                <div class="net-connector net-conn-clawp"></div>
+                <div class="net-connector net-conn-meme"></div>
+
                 <div class="network-center">
                     <img src="/openclaw-logo.png" alt="OpenClaw" class="network-center-logo">
                     <div class="network-center-title">OpenClaw</div>
-                    <div class="network-center-sub">MOLTBOOK READY</div>
+                    <div class="network-center-sub">ORCHESTRATOR</div>
                 </div>
-                
-                <div class="network-token network-token-1 token-active">$CLAWP</div>
-                <div class="network-token network-token-2">$MEME</div>
-                <div class="network-token network-token-3">$MEME</div>
-                <div class="network-token network-token-4">$MEME</div>
-                <div class="network-token network-token-5">$MEME</div>
-                <div class="network-token network-token-6">$MEME</div>
 
-                <div class="network-label network-label-left">
-                    <div class="network-label-title">Input</div>
-                    <div>Your Idea</div>
+                <div class="net-node net-node-claude">
+                    <div class="net-node-circle">
+                        <img src="/logos/claude.webp" alt="Claude AI">
+                    </div>
+                    <span class="net-node-name">Claude</span>
                 </div>
-                <div class="network-flow-arrow network-flow-arrow-left">→</div>
-                
-                <div class="network-label network-label-right">
-                    <div class="network-label-title">Output</div>
-                    <div>Token + Agent</div>
+
+                <div class="net-node net-node-openai">
+                    <div class="net-node-circle">
+                        <img src="/logos/openai.webp" alt="OpenAI">
+                    </div>
+                    <span class="net-node-name">OpenAI</span>
                 </div>
-                <div class="network-flow-arrow network-flow-arrow-right">→</div>
+
+                <div class="net-node net-node-moltbook">
+                    <div class="net-node-circle">
+                        <img src="/logos/moltbook.webp" alt="Moltbook">
+                    </div>
+                    <span class="net-node-name">Moltbook</span>
+                </div>
+
+                <div class="net-node net-node-erc8004">
+                    <div class="net-node-circle">
+                        <img src="/logos/erc8004.png" alt="ERC-8004">
+                    </div>
+                    <span class="net-node-name">ERC-8004</span>
+                </div>
+
+                <div class="net-node net-node-clawp">
+                    <div class="net-node-circle">
+                        <img src="/logo.png" alt="CLAWP">
+                    </div>
+                    <span class="net-node-name">$CLAWP</span>
+                </div>
+
+                <div class="net-node net-node-meme">
+                    <div class="net-node-circle">
+                        <img src="/logos/meme.png" alt="$MEME">
+                    </div>
+                    <span class="net-node-name">$MEME</span>
+                </div>
             </div>
         </section>
 
@@ -2345,8 +2380,8 @@
                             <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
                         </svg>
                     </div>
-                    <h3>Token and Moltbook Agent</h3>
-                    <p>Every token launch includes a unique AI agent personality. Claim it and start engaging on Moltbook instantly.</p>
+                    <h3>Token, Agent, and Identity</h3>
+                    <p>Every launch includes a Moltbook agent and an ERC-8004 on-chain identity, verified on 8004scan.io.</p>
                 </div>
                 <div class="why-card">
                     <div class="why-icon">
@@ -2374,59 +2409,11 @@
             </div>
 
             <div class="conclusion-box">
-                <p>One prompt away from launch.</p>
+                <p>One prompt away from a verified AI agent.</p>
             </div>
-        </section>
-
-        <section class="final-cta">
-            <h2>Describe your token. OpenClaw does the rest.</h2>
-            <a href="/app" class="btn btn-primary">Start with a prompt</a>
         </section>
 
         <footer>
-            <div class="footer-cards">
-                <a href="https://x.com/clawpad" target="_blank" class="footer-card">
-                    <div class="footer-card-icon">
-                        <svg viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-                        </svg>
-                    </div>
-                    <div class="footer-card-title">Follow Us</div>
-                    <div class="footer-card-desc">Follow updates</div>
-                </a>
-                <a href="/docs" class="footer-card">
-                    <div class="footer-card-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                            <polyline points="14 2 14 8 20 8"/>
-                            <line x1="16" y1="13" x2="8" y2="13"/>
-                            <line x1="16" y1="17" x2="8" y2="17"/>
-                            <polyline points="10 9 9 9 8 9"/>
-                        </svg>
-                    </div>
-                    <div class="footer-card-title">Documentation</div>
-                    <div class="footer-card-desc">Learn the ropes</div>
-                </a>
-                <a href="https://github.com/Clawpad" target="_blank" class="footer-card">
-                    <div class="footer-card-icon">
-                        <svg viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-                        </svg>
-                    </div>
-                    <div class="footer-card-title">GitHub</div>
-                    <div class="footer-card-desc">View the source</div>
-                </a>
-                <a href="https://www.clawhub.ai/iclawn/clawp" target="_blank" class="footer-card">
-                    <div class="footer-card-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-                        </svg>
-                    </div>
-                    <div class="footer-card-title">ClawHub</div>
-                    <div class="footer-card-desc">CLAWP on OpenClaw</div>
-                </a>
-            </div>
-
             <div class="access-channels">
                 <div class="access-channels-header">
                     <h3 class="access-channels-title">Integrated Access Channels</h3>
@@ -2541,8 +2528,57 @@
                     </div>
                 </div>
 
-                <p class="access-channels-footer">All agent interfaces connect to the same autonomous execution engine.<br>Public availability varies by interface.</p>
             </div>
+
+            <section class="final-cta">
+                <h2>Describe your token. OpenClaw does the rest.</h2>
+                <a href="/app" class="btn btn-primary">Start with a prompt</a>
+            </section>
+
+            <div class="footer-cards">
+                <a href="https://x.com/clawpad" target="_blank" class="footer-card">
+                    <div class="footer-card-icon">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                        </svg>
+                    </div>
+                    <div class="footer-card-title">Follow Us</div>
+                    <div class="footer-card-desc">Follow updates</div>
+                </a>
+                <a href="/docs" class="footer-card">
+                    <div class="footer-card-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                            <line x1="16" y1="13" x2="8" y2="13"/>
+                            <line x1="16" y1="17" x2="8" y2="17"/>
+                            <polyline points="10 9 9 9 8 9"/>
+                        </svg>
+                    </div>
+                    <div class="footer-card-title">Documentation</div>
+                    <div class="footer-card-desc">Learn the ropes</div>
+                </a>
+                <a href="https://github.com/Clawpad" target="_blank" class="footer-card">
+                    <div class="footer-card-icon">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                        </svg>
+                    </div>
+                    <div class="footer-card-title">GitHub</div>
+                    <div class="footer-card-desc">View the source</div>
+                </a>
+                <a href="https://www.clawhub.ai/iclawn/clawp" target="_blank" class="footer-card">
+                    <div class="footer-card-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                        </svg>
+                    </div>
+                    <div class="footer-card-title">ClawHub</div>
+                    <div class="footer-card-desc">CLAWP on OpenClaw</div>
+                </a>
+            </div>
+
+            <p class="access-channels-footer">All agent interfaces connect to the same autonomous execution engine.<br>Public availability varies by interface.</p>
 
             <div class="footer-bottom">
                 <nav class="footer-nav">
@@ -2562,8 +2598,20 @@
 
     <script src="/mock-data.js"></script>
     <script>
+        function getChainInfo(venue) {
+            const chains = {
+                'pump.fun': { name: 'Solana', color: '#9945FF', bg: 'rgba(153, 69, 255, 0.15)' },
+                'bags.fm': { name: 'Solana', color: '#9945FF', bg: 'rgba(153, 69, 255, 0.15)' },
+                'clanker': { name: 'Base', color: '#0052FF', bg: 'rgba(0, 82, 255, 0.15)' },
+                'four.meme': { name: 'BNB Chain', color: '#F0B90B', bg: 'rgba(240, 185, 11, 0.15)' }
+            };
+            return chains[venue] || chains['pump.fun'];
+        }
+
         function renderTokenCard(token, showStatus = false, statusType = 'live') {
-            const pumpUrl = token.pumpfunUrl || `https://pump.fun/coin/${token.mintAddress}`;
+            const venue = token.venue || 'pump.fun';
+            const chain = getChainInfo(venue);
+            const platformUrl = token.platformUrl || (venue === 'bags.fm' ? `https://bags.fm/token/${token.mintAddress}` : `https://pump.fun/coin/${token.mintAddress}`);
             const bondingProgress = token.bondingProgress || 0;
             const landingPageUrl = token.landingPageUrl || (token.slug ? `/t/${token.slug}` : null);
             
@@ -2594,13 +2642,15 @@
             return `
                 <div class="token-card">
                     <div class="token-header">
-                        <div class="token-image" style="background: linear-gradient(135deg, #${Math.random().toString(16).substr(2,6)}, #${Math.random().toString(16).substr(2,6)}); overflow: hidden;">
-                            ${token.imageUrl ? `<img src="${token.imageUrl}" alt="${token.symbol}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 14px;" onerror="this.style.display='none'; this.parentElement.innerHTML='${token.symbol ? token.symbol.charAt(0) : '?'}';">` : (token.symbol ? token.symbol.charAt(0) : '?')}
+                        <div class="token-image" style="background: linear-gradient(135deg, #${Math.random().toString(16).substr(2,6)}, #${Math.random().toString(16).substr(2,6)}); overflow: hidden; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: bold; color: white;">
+                            ${token.imageUrl ? `<img src="${token.imageUrl}" alt="${token.symbol}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 14px;" onerror="this.onerror=null; this.style.display='none';">` : ''}
+                            ${!token.imageUrl ? (token.symbol ? token.symbol.charAt(0) : '?') : ''}
                         </div>
                         <div class="token-info">
                             <h3>${token.name || 'Unknown'}</h3>
                             <span class="symbol">$${token.symbol || '???'}</span>
                         </div>
+                        <span class="chain-badge" style="background: ${chain.bg}; color: ${chain.color}; font-size: 0.65rem; padding: 3px 8px; border-radius: 6px; font-weight: 700; letter-spacing: 0.5px; white-space: nowrap; align-self: flex-start;">${chain.name}</span>
                     </div>
                     <div class="token-stats">
                         <div>
@@ -2616,35 +2666,51 @@
                     ${statusHTML}
                     <div style="display: flex; gap: 8px; margin-top: 16px;">
                         ${viewPageBtn}
-                        <a href="${pumpUrl}" target="_blank" class="trade-now-btn" style="flex: 1; margin-top: 0;">Trade Now →</a>
+                        <a href="${platformUrl}" target="_blank" class="trade-now-btn" style="flex: 1; margin-top: 0;">Trade Now →</a>
                     </div>
                 </div>
             `;
         }
 
+        function buildCardSet(tokenCards, comingSoonCard, minCards) {
+            const fillerCount = Math.max(0, minCards - tokenCards.length);
+            const fillerCards = comingSoonCard.repeat(fillerCount);
+            const oneSet = tokenCards.join('') + fillerCards;
+            return oneSet + oneSet;
+        }
+
         async function renderTokens() {
             const activeContainer = document.getElementById('activeTokens');
             const graduatedContainer = document.getElementById('graduatedTokens');
+            const MIN_CARDS = 5;
             
             const comingSoonCard = `
                 <div class="token-card coming-soon-card">
-                    <div class="token-card-header">
-                        <div class="token-avatar coming-soon-avatar">?</div>
+                    <div class="token-header">
+                        <div class="token-image coming-soon-avatar">?</div>
                         <div class="token-info">
-                            <div class="token-name">Coming Soon</div>
-                            <div class="token-symbol">$???</div>
+                            <h3>Coming Soon</h3>
+                            <span class="symbol">$???</span>
                         </div>
                     </div>
-                    <div class="token-progress">
-                        <div class="progress-bar">
-                            <div class="progress-fill" style="width: 0%"></div>
+                    <div class="token-stats">
+                        <div>
+                            <div class="token-stat-label">Market Cap</div>
+                            <div class="token-stat-value">--</div>
                         </div>
-                        <div class="progress-text">Awaiting Launch</div>
+                        <div style="text-align: right;">
+                            <div class="token-stat-label">Status</div>
+                            <div class="token-stat-value" style="color: var(--text-muted);">Awaiting</div>
+                        </div>
+                    </div>
+                    <div class="token-status" style="background: rgba(255,255,255,0.05); color: var(--text-muted);">PENDING</div>
+                    <div style="display: flex; gap: 8px; margin-top: 16px;">
+                        <a href="/app" class="trade-now-btn" style="flex: 1; margin-top: 0; opacity: 0.5;">Launch Yours →</a>
                     </div>
                 </div>
             `;
             
-            const placeholderCards = comingSoonCard.repeat(8);
+            const placeholderSet = buildCardSet([], comingSoonCard, MIN_CARDS);
             
             try {
                 const [activeRes, gradRes] = await Promise.all([
@@ -2654,26 +2720,18 @@
                 const activeData = await activeRes.json();
                 const gradData = await gradRes.json();
                 
-                const active = activeData.success ? activeData.tokens : [];
-                const graduated = gradData.success ? gradData.tokens : [];
+                const active = activeData.success ? activeData.tokens.slice(0, MIN_CARDS) : [];
+                const graduated = gradData.success ? gradData.tokens.slice(0, MIN_CARDS) : [];
                 
-                if (active.length > 0) {
-                    const cards = active.map(t => renderTokenCard(t, true, 'live')).join('');
-                    activeContainer.innerHTML = cards + cards;
-                } else {
-                    activeContainer.innerHTML = placeholderCards + placeholderCards;
-                }
+                const activeCards = active.map(t => renderTokenCard(t, true, 'live'));
+                activeContainer.innerHTML = buildCardSet(activeCards, comingSoonCard, MIN_CARDS);
                 
-                if (graduated.length > 0) {
-                    const cards = graduated.map(t => renderTokenCard(t, true, 'graduated')).join('');
-                    graduatedContainer.innerHTML = cards + cards;
-                } else {
-                    graduatedContainer.innerHTML = placeholderCards + placeholderCards;
-                }
+                const gradCards = graduated.map(t => renderTokenCard(t, true, 'graduated'));
+                graduatedContainer.innerHTML = buildCardSet(gradCards, comingSoonCard, MIN_CARDS);
             } catch (e) {
                 console.error('Failed to load tokens:', e);
-                activeContainer.innerHTML = placeholderCards + placeholderCards;
-                graduatedContainer.innerHTML = placeholderCards + placeholderCards;
+                activeContainer.innerHTML = placeholderSet;
+                graduatedContainer.innerHTML = placeholderSet;
             }
         }
         
