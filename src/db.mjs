@@ -376,6 +376,28 @@ export async function updateAgentSkillClaim(id, apiKeyEncrypted, username, agent
   return result.rows[0];
 }
 
+export async function updateAgentSkillPendingClaim(id, apiKeyEncrypted, agentName, claimUrl, verificationCode) {
+  const result = await query(
+    `UPDATE agent_skills 
+     SET moltbook_api_key_encrypted = $1, moltbook_username = $2,
+         moltbook_claim_url = $3, moltbook_verification_code = $4,
+         status = 'pending_claim', updated_at = NOW()
+     WHERE id = $5 RETURNING *`,
+    [apiKeyEncrypted, agentName, claimUrl, verificationCode, id]
+  );
+  return result.rows[0];
+}
+
+export async function confirmAgentSkillClaim(id) {
+  const result = await query(
+    `UPDATE agent_skills 
+     SET status = 'claimed', claimed_at = NOW(), updated_at = NOW()
+     WHERE id = $1 RETURNING *`,
+    [id]
+  );
+  return result.rows[0];
+}
+
 export async function updateAgentSkillStatus(id, status) {
   const result = await query(
     `UPDATE agent_skills SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
@@ -452,9 +474,9 @@ export async function getSuggestedPosts(agentSkillId, limit = 5) {
 export async function updateAgentPostStatus(id, status, moltbookPostId = null, moltbookPostUrl = null) {
   const result = await query(
     `UPDATE agent_posts 
-     SET status = $1, moltbook_post_id = COALESCE($2, moltbook_post_id), 
-         moltbook_post_url = COALESCE($3, moltbook_post_url),
-         posted_at = CASE WHEN $1 = 'posted' THEN NOW() ELSE posted_at END
+     SET status = $1::text, moltbook_post_id = COALESCE($2::text, moltbook_post_id), 
+         moltbook_post_url = COALESCE($3::text, moltbook_post_url),
+         posted_at = CASE WHEN $1::text = 'posted' THEN NOW() ELSE posted_at END
      WHERE id = $4 RETURNING *`,
     [status, moltbookPostId, moltbookPostUrl, id]
   );
@@ -469,6 +491,100 @@ export async function markAgentLastPost(agentSkillId) {
     [agentSkillId]
   );
   return result.rows[0];
+}
+
+export async function getAgentPostsToday(agentSkillId) {
+  const result = await query(
+    `SELECT COUNT(*) as count FROM agent_posts 
+     WHERE agent_skill_id = $1 AND status = 'posted' 
+     AND created_at >= NOW() - INTERVAL '24 hours'`,
+    [agentSkillId]
+  );
+  return parseInt(result.rows[0].count, 10);
+}
+
+// ERC-8004 Agent Identity functions
+export async function createAgentIdentity(tokenId, data) {
+  const result = await query(
+    `INSERT INTO agent_identities (token_id, agent_skill_id, registry_chain, registry_address, status)
+     VALUES ($1, $2, $3, $4, 'pending')
+     ON CONFLICT (token_id) DO UPDATE SET
+       registry_chain = EXCLUDED.registry_chain,
+       registry_address = EXCLUDED.registry_address,
+       status = 'pending',
+       updated_at = NOW()
+     RETURNING *`,
+    [tokenId, data.agentSkillId, data.registryChain, data.registryAddress]
+  );
+  return result.rows[0];
+}
+
+export async function updateAgentIdentityMetadata(id, metadataUri, metadataCid) {
+  const result = await query(
+    `UPDATE agent_identities 
+     SET metadata_uri = $1, metadata_cid = $2, status = 'metadata_ready', updated_at = NOW()
+     WHERE id = $3 RETURNING *`,
+    [metadataUri, metadataCid, id]
+  );
+  return result.rows[0];
+}
+
+export async function updateAgentIdentityRegistered(id, agentNftId, txHash, registrarWallet, scanUrl) {
+  const result = await query(
+    `UPDATE agent_identities 
+     SET agent_nft_id = $1, tx_hash = $2, registrar_wallet = $3, scan_url = $4,
+         status = 'registered', registered_at = NOW(), updated_at = NOW()
+     WHERE id = $5 RETURNING *`,
+    [agentNftId, txHash, registrarWallet, scanUrl, id]
+  );
+  return result.rows[0];
+}
+
+export async function updateAgentIdentityStatus(id, status) {
+  const result = await query(
+    `UPDATE agent_identities SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
+    [status, id]
+  );
+  return result.rows[0];
+}
+
+export async function getAgentIdentityByTokenId(tokenId) {
+  const result = await query(
+    `SELECT ai.*, t.name as token_name, t.symbol, t.image_url, t.slug, t.venue, t.mint_address,
+            s.archetype, s.voice, s.topics, s.quirks
+     FROM agent_identities ai
+     JOIN tokens t ON ai.token_id = t.id
+     LEFT JOIN agent_skills s ON ai.agent_skill_id = s.id
+     WHERE ai.token_id = $1`,
+    [tokenId]
+  );
+  return result.rows[0];
+}
+
+export async function getAllAgentIdentities(limit = 50) {
+  const result = await query(
+    `SELECT ai.*, t.name as token_name, t.symbol, t.image_url, t.slug, t.venue,
+            s.archetype
+     FROM agent_identities ai
+     JOIN tokens t ON ai.token_id = t.id
+     LEFT JOIN agent_skills s ON ai.agent_skill_id = s.id
+     ORDER BY ai.created_at DESC LIMIT $1`,
+    [limit]
+  );
+  return result.rows;
+}
+
+export async function getPendingAgentIdentities() {
+  const result = await query(
+    `SELECT ai.*, t.name as token_name, t.symbol, t.image_url, t.slug, t.venue, t.mint_address,
+            s.archetype, s.voice, s.topics, s.quirks, s.intro_post
+     FROM agent_identities ai
+     JOIN tokens t ON ai.token_id = t.id
+     LEFT JOIN agent_skills s ON ai.agent_skill_id = s.id
+     WHERE ai.status IN ('pending', 'metadata_ready')
+     ORDER BY ai.created_at ASC`
+  );
+  return result.rows;
 }
 
 export async function getAgentPostStats() {
@@ -520,6 +636,8 @@ export default {
   getAgentSkillByTokenId,
   getAgentSkill,
   updateAgentSkillClaim,
+  updateAgentSkillPendingClaim,
+  confirmAgentSkillClaim,
   updateAgentSkillStatus,
   updateAgentSkillKarma,
   getUnclaimedAgentSkills,
@@ -529,5 +647,13 @@ export default {
   getSuggestedPosts,
   updateAgentPostStatus,
   markAgentLastPost,
-  getAgentPostStats
+  getAgentPostsToday,
+  getAgentPostStats,
+  createAgentIdentity,
+  updateAgentIdentityMetadata,
+  updateAgentIdentityRegistered,
+  updateAgentIdentityStatus,
+  getAgentIdentityByTokenId,
+  getAllAgentIdentities,
+  getPendingAgentIdentities
 };
