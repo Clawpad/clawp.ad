@@ -10,7 +10,17 @@ import solana from './src/solana.mjs';
 import pumpportal from './src/pumpportal.mjs';
 import { startBuybackScheduler } from './src/buyback.mjs';
 import vanityPool from './src/vanity-pool.mjs';
+import { startBagsFeeClaimer } from './src/bags-fee-claimer.mjs';
+import { startPumpfunFeeClaimer } from './src/pumpfun-fee-claimer.mjs';
+import { startClankerFeeClaimer } from './src/clanker-fee-claimer.mjs';
+import * as bagsSDK from './src/bags-sdk.mjs';
+import * as clankerSDK from './src/clanker.mjs';
+import * as baseWallet from './src/base-wallet.mjs';
+import * as bnbWallet from './src/bnb-wallet.mjs';
+import * as fourmemeSDK from './src/fourmeme.mjs';
 import fs from 'node:fs';
+import erc8004 from './src/erc8004.mjs';
+import { startAutoPostScheduler, testPostForAgent } from './src/moltbook-autoposter.mjs';
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -37,6 +47,28 @@ function isValidUUID(str) {
   if (UUID_REGEX.test(str)) return true;
   const num = parseInt(str, 10);
   return !isNaN(num) && num > 0 && String(num) === str;
+}
+
+function getRequiredDeposit(venue) {
+  if (venue === 'bags.fm') return 0.06;
+  if (venue === 'clanker') return 0.001;
+  if (venue === 'four.meme') return 0.005;
+  return 0.025;
+}
+
+function getChainForVenue(venue) {
+  if (venue === 'clanker') return 'base';
+  if (venue === 'four.meme') return 'bnb';
+  return 'solana';
+}
+
+function getVenuePlatformUrl(venue, mintAddress) {
+  switch (venue) {
+    case 'bags.fm': return `https://bags.fm/token/${mintAddress}`;
+    case 'clanker': return `https://clanker.world/clanker/${mintAddress}`;
+    case 'four.meme': return `https://four.meme/token/${mintAddress}`;
+    default: return `https://pump.fun/coin/${mintAddress}`;
+  }
 }
 
 function sanitizeText(str, maxLength = 500) {
@@ -175,17 +207,33 @@ app.use(express.static(path.join(__dirname, 'public'), {
 
 app.post('/api/session/create', async (req, res) => {
   try {
-    const wallet = solana.generateWallet();
-    const encryptedPrivKey = encrypt(wallet.secretKey);
+    const { venue = 'pump.fun' } = req.body || {};
+    const validVenues = ['pump.fun', 'bags.fm', 'clanker', 'four.meme'];
+    const selectedVenue = validVenues.includes(venue) ? venue : 'pump.fun';
     
-    const session = await db.createSession(null, wallet.publicKey, encryptedPrivKey);
+    let wallet, encryptedPrivKey;
+    
+    if (selectedVenue === 'clanker') {
+      wallet = baseWallet.generateWallet();
+      encryptedPrivKey = encrypt(wallet.secretKey);
+    } else if (selectedVenue === 'four.meme') {
+      wallet = bnbWallet.generateWallet();
+      encryptedPrivKey = encrypt(wallet.secretKey);
+    } else {
+      wallet = solana.generateWallet();
+      encryptedPrivKey = encrypt(wallet.secretKey);
+    }
+    
+    const session = await db.createSession(null, wallet.publicKey, encryptedPrivKey, selectedVenue);
     
     res.json({
       success: true,
       sessionId: session.id,
       depositAddress: wallet.publicKey,
-      requiredAmount: 0.025,
-      expiresIn: 1800
+      requiredAmount: getRequiredDeposit(selectedVenue),
+      expiresIn: 1800,
+      venue: selectedVenue,
+      chain: getChainForVenue(selectedVenue)
     });
   } catch (error) {
     console.error('Error creating session:', error);
@@ -204,9 +252,16 @@ app.get('/api/session/:id', async (req, res) => {
     }
     
     let balance = 0;
+    const venue = session.venue || 'pump.fun';
     if (session.deposit_address) {
       try {
-        balance = await solana.getBalance(session.deposit_address);
+        if (venue === 'four.meme') {
+          balance = await bnbWallet.getBalance(session.deposit_address);
+        } else if (venue === 'clanker') {
+          balance = await baseWallet.getBalance(session.deposit_address);
+        } else {
+          balance = await solana.getBalance(session.deposit_address);
+        }
       } catch (e) {
         console.error('Error getting balance:', e.message);
       }
@@ -222,7 +277,9 @@ app.get('/api/session/:id', async (req, res) => {
         blueprint: session.blueprint,
         tokenId: session.token_id,
         createdAt: session.created_at,
-        expiresAt: session.expires_at
+        expiresAt: session.expires_at,
+        venue: venue,
+        chain: getChainForVenue(venue)
       },
       currentBalance: balance
     });
@@ -441,12 +498,21 @@ app.post('/api/session/:id/check-deposit', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Session not found' });
     }
     
-    const balance = await solana.getBalance(session.deposit_address);
-    const requiredAmount = 0.025;
+    const venue = session.venue || 'pump.fun';
+    
+    let balance;
+    if (venue === 'four.meme') {
+      balance = await bnbWallet.getBalance(session.deposit_address);
+    } else if (venue === 'clanker') {
+      balance = await baseWallet.getBalance(session.deposit_address);
+    } else {
+      balance = await solana.getBalance(session.deposit_address);
+    }
+    const requiredAmount = getRequiredDeposit(venue);
     
     if (balance >= requiredAmount) {
       let fundingWallet = session.funding_wallet;
-      if (!fundingWallet) {
+      if (!fundingWallet && venue !== 'clanker' && venue !== 'four.meme') {
         fundingWallet = await solana.getRecentDepositSender(session.deposit_address);
         console.log(`[Deposit] Detected funding wallet: ${fundingWallet}`);
       }
@@ -487,19 +553,262 @@ app.post('/api/session/:id/deploy', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Token already deployed' });
     }
     
+    const blueprint = session.blueprint;
+    if (!blueprint || !blueprint.name || !blueprint.symbol) {
+      return res.status(400).json({ success: false, error: 'No blueprint found' });
+    }
+    
+    const venue = session.venue || 'pump.fun';
+    
+    if (venue === 'clanker') {
+      const ethBalanceWei = await baseWallet.getBalanceWei(session.deposit_address);
+      const requiredWei = baseWallet.parseEther(String(getRequiredDeposit('clanker')));
+      const ethBalance = parseFloat(ethBalanceWei.toString()) / 1e18;
+      if (ethBalanceWei < requiredWei) {
+        return res.status(400).json({
+          success: false,
+          error: 'Insufficient ETH deposit',
+          balance: ethBalance,
+          required: getRequiredDeposit('clanker')
+        });
+      }
+      
+      await db.updateSessionStatus(session.id, 'deploying');
+      
+      try {
+        const walletPrivKey = decrypt(session.wallet_private_key_encrypted);
+        let imageUrl = blueprint.ipfsImageUrl || blueprint.imageUrl || '';
+        
+        if (!imageUrl && blueprint.logoBase64) {
+          try {
+            const imageBuffer = Buffer.from(blueprint.logoBase64, 'base64');
+            const ipfsResult = await pumpportal.uploadToIPFS(imageBuffer, {
+              name: blueprint.name,
+              symbol: blueprint.symbol,
+              description: blueprint.description || ''
+            });
+            imageUrl = ipfsResult.metadata?.image || '';
+            console.log('[Deploy/Clanker] Uploaded image to IPFS:', imageUrl);
+          } catch (ipfsErr) {
+            console.error('[Deploy/Clanker] IPFS upload failed:', ipfsErr.message);
+          }
+        }
+        
+        console.log(`[Deploy/Clanker] Deploying ${blueprint.name} ($${blueprint.symbol}) on Base using session wallet...`);
+        const deployResult = await clankerSDK.deployToken({
+          name: blueprint.name,
+          symbol: blueprint.symbol,
+          imageUrl: imageUrl,
+          privateKey: walletPrivKey
+        });
+        
+        console.log(`[Deploy/Clanker] Deploy tx: ${deployResult.txHash}`);
+        console.log(`[Deploy/Clanker] Token address: ${deployResult.contractAddress}`);
+        
+        if (!deployResult.contractAddress) {
+          throw new Error('Clanker deploy succeeded but no contract address returned');
+        }
+        
+        const token = await db.createToken({
+          mintAddress: deployResult.contractAddress,
+          name: blueprint.name,
+          symbol: blueprint.symbol,
+          description: blueprint.description || '',
+          imageUrl: imageUrl,
+          metadataUri: '',
+          walletPublicKey: deployResult.deployerAddress || '',
+          walletPrivateKeyEncrypted: session.wallet_private_key_encrypted || '',
+          status: 'active',
+          websiteUrl: blueprint.website || null,
+          twitterUrl: blueprint.twitter || null,
+          venue: 'clanker'
+        });
+        
+        const narrative = blueprint.narrative || '';
+        const themeColors = generateThemeColors(narrative, blueprint.name, blueprint.description);
+        const slug = await db.generateUniqueSlug(blueprint.symbol);
+        await db.updateTokenLandingData(token.id, narrative, themeColors.primary, themeColors.accent, slug);
+        console.log(`[Deploy/Clanker] Landing page ready at /${slug}`);
+        
+        await db.updateSessionStatus(session.id, 'completed', token.id);
+        
+        let agentSkill = null;
+        try {
+          console.log(`[Deploy/Clanker] Generating agent personality for ${token.symbol}...`);
+          const skillData = await generateAgentSkill(token, blueprint);
+          agentSkill = await db.createAgentSkill(token.id, skillData);
+          console.log(`[Deploy/Clanker] Agent personality created: ${agentSkill.archetype}`);
+        } catch (agentError) {
+          console.error('[Deploy/Clanker] Agent skill generation failed (non-critical):', agentError.message);
+        }
+        
+        return res.json({
+          success: true,
+          token: {
+            id: token.id,
+            mintAddress: token.mint_address,
+            name: token.name,
+            symbol: token.symbol,
+            slug: slug,
+            clankerUrl: `https://clanker.world/clanker/${token.mint_address}`,
+            basescanUrl: `https://basescan.org/token/${token.mint_address}`,
+            dexscreenerUrl: `https://dexscreener.com/base/${token.mint_address}`,
+            landingPageUrl: `/${slug}`,
+            chain: 'base'
+          },
+          agentSkill: agentSkill ? {
+            id: agentSkill.id,
+            archetype: agentSkill.archetype,
+            voice: agentSkill.voice,
+            status: agentSkill.status
+          } : null,
+          transactionSignature: deployResult.txHash
+        });
+      } catch (clankerError) {
+        console.error('[Deploy/Clanker] Deployment failed:', clankerError);
+        await db.updateSessionStatus(session.id, 'deposit_received');
+        const remainingBalance = await baseWallet.getBalance(session.deposit_address);
+        return res.status(500).json({ 
+          success: false, 
+          error: clankerError.message,
+          recoverable: true,
+          remainingBalance,
+          message: `Deploy failed but your funds (${remainingBalance.toFixed(6)} ETH) are still in your session wallet. You can retry or request a refund.`
+        });
+      }
+    }
+    
+    if (venue === 'four.meme') {
+      const bnbBalanceWei = await bnbWallet.getBalanceWei(session.deposit_address);
+      const requiredWei = bnbWallet.parseEther(String(getRequiredDeposit('four.meme')));
+      const bnbBalance = parseFloat(bnbBalanceWei.toString()) / 1e18;
+      if (bnbBalanceWei < requiredWei) {
+        return res.status(400).json({
+          success: false,
+          error: 'Insufficient BNB deposit',
+          balance: bnbBalance,
+          required: getRequiredDeposit('four.meme')
+        });
+      }
+      
+      await db.updateSessionStatus(session.id, 'deploying');
+      
+      try {
+        const walletPrivKey = decrypt(session.wallet_private_key_encrypted);
+        
+        let imageBuffer = null;
+        let imageUrl = blueprint.ipfsImageUrl || blueprint.imageUrl || '';
+        
+        if (blueprint.logoBase64) {
+          imageBuffer = Buffer.from(blueprint.logoBase64, 'base64');
+        } else if (imageUrl && !imageUrl.startsWith('https://static.four.meme')) {
+          try {
+            const imgRes = await fetch(imageUrl);
+            imageBuffer = Buffer.from(await imgRes.arrayBuffer());
+          } catch (imgErr) {
+            console.error('[Deploy/FourMeme] Failed to fetch image:', imgErr.message);
+          }
+        }
+        
+        console.log(`[Deploy/FourMeme] Deploying ${blueprint.name} ($${blueprint.symbol}) on BNB Chain...`);
+        const deployResult = await fourmemeSDK.deployToken({
+          name: blueprint.name,
+          symbol: blueprint.symbol,
+          description: blueprint.description || '',
+          imageBuffer,
+          imageUrl,
+          privateKey: walletPrivKey,
+          label: 'Meme',
+          webUrl: blueprint.website || '',
+          twitterUrl: blueprint.twitter || ''
+        });
+        
+        console.log(`[Deploy/FourMeme] Deploy tx: ${deployResult.txHash}`);
+        console.log(`[Deploy/FourMeme] Token address: ${deployResult.contractAddress}`);
+        
+        if (!deployResult.contractAddress) {
+          throw new Error('Four.meme deploy succeeded but no token address returned');
+        }
+        
+        const token = await db.createToken({
+          mintAddress: deployResult.contractAddress,
+          name: blueprint.name,
+          symbol: blueprint.symbol,
+          description: blueprint.description || '',
+          imageUrl: imageUrl || '',
+          metadataUri: '',
+          walletPublicKey: deployResult.deployerAddress || session.deposit_address,
+          walletPrivateKeyEncrypted: session.wallet_private_key_encrypted || '',
+          status: 'active',
+          websiteUrl: blueprint.website || null,
+          twitterUrl: blueprint.twitter || null,
+          venue: 'four.meme'
+        });
+        
+        const narrative = blueprint.narrative || '';
+        const themeColors = generateThemeColors(narrative, blueprint.name, blueprint.description);
+        const slug = await db.generateUniqueSlug(blueprint.symbol);
+        await db.updateTokenLandingData(token.id, narrative, themeColors.primary, themeColors.accent, slug);
+        console.log(`[Deploy/FourMeme] Landing page ready at /${slug}`);
+        
+        await db.updateSessionStatus(session.id, 'completed', token.id);
+        
+        let agentSkill = null;
+        try {
+          console.log(`[Deploy/FourMeme] Generating agent personality for ${token.symbol}...`);
+          const skillData = await generateAgentSkill(token, blueprint);
+          agentSkill = await db.createAgentSkill(token.id, skillData);
+          console.log(`[Deploy/FourMeme] Agent personality created: ${agentSkill.archetype}`);
+        } catch (agentError) {
+          console.error('[Deploy/FourMeme] Agent skill generation failed (non-critical):', agentError.message);
+        }
+        
+        return res.json({
+          success: true,
+          token: {
+            id: token.id,
+            mintAddress: token.mint_address,
+            name: token.name,
+            symbol: token.symbol,
+            slug: slug,
+            venueUrl: `https://four.meme/token/${token.mint_address}`,
+            bscscanUrl: `https://bscscan.com/token/${token.mint_address}`,
+            dexscreenerUrl: `https://dexscreener.com/bsc/${token.mint_address}`,
+            landingPageUrl: `/${slug}`,
+            chain: 'bnb'
+          },
+          agentSkill: agentSkill ? {
+            id: agentSkill.id,
+            archetype: agentSkill.archetype,
+            voice: agentSkill.voice,
+            status: agentSkill.status
+          } : null,
+          transactionSignature: deployResult.txHash
+        });
+      } catch (fourMemeError) {
+        console.error('[Deploy/FourMeme] Deployment failed:', fourMemeError);
+        await db.updateSessionStatus(session.id, 'deposit_received');
+        let remainingBalance = 0;
+        try { remainingBalance = await bnbWallet.getBalance(session.deposit_address); } catch(e) {}
+        return res.status(500).json({ 
+          success: false, 
+          error: fourMemeError.message,
+          recoverable: true,
+          remainingBalance,
+          message: `Deploy failed but your funds (${remainingBalance.toFixed(4)} BNB) are still in your session wallet. You can retry or request a refund.`
+        });
+      }
+    }
+    
     const balance = await solana.getBalance(session.deposit_address);
-    if (balance < 0.025) {
+    const requiredDeposit = getRequiredDeposit(venue);
+    if (balance < requiredDeposit) {
       return res.status(400).json({ 
         success: false, 
         error: 'Insufficient deposit',
         balance,
-        required: 0.025
+        required: requiredDeposit
       });
-    }
-    
-    const blueprint = session.blueprint;
-    if (!blueprint || !blueprint.name || !blueprint.symbol) {
-      return res.status(400).json({ success: false, error: 'No blueprint found' });
     }
     
     await db.updateSessionStatus(session.id, 'deploying');
@@ -585,18 +894,41 @@ app.post('/api/session/:id/deploy', async (req, res) => {
         metadataUri = `https://pump.fun/api/ipfs/placeholder/${blueprint.symbol}`;
       }
       
-      const txBytes = await pumpportal.createTokenTransaction({
-        publicKey: signerKeypair.publicKey.toBase58(),
-        name: blueprint.name,
-        symbol: blueprint.symbol,
-        metadataUri: metadataUri,
-        mintPublicKey: mintKeypair.publicKey.toBase58(),
-        initialBuyAmount: 0,
-        slippage: 10,
-        priorityFee: 0.0005
-      });
+      let signature;
       
-      const signature = await solana.signAndSendTransaction(txBytes, [signerKeypair, mintKeypair]);
+      if (venue === 'bags.fm') {
+        console.log('[Deploy] Using bags.fm for token creation');
+        
+        const bagsResult = await bagsSDK.createToken({
+          name: blueprint.name,
+          symbol: blueprint.symbol,
+          description: blueprint.description || '',
+          imageUrl: imageUrl,
+          keypair: signerKeypair,
+          initialBuySol: 0
+        });
+        
+        console.log('[Deploy] bags.fm createToken result:', JSON.stringify(bagsResult));
+        signature = bagsResult.signature;
+        
+        if (bagsResult.mintAddress) {
+          mintKeypair = { publicKey: { toBase58: () => bagsResult.mintAddress } };
+        }
+      } else {
+        console.log('[Deploy] Using pump.fun for token creation');
+        const txBytes = await pumpportal.createTokenTransaction({
+          publicKey: signerKeypair.publicKey.toBase58(),
+          name: blueprint.name,
+          symbol: blueprint.symbol,
+          metadataUri: metadataUri,
+          mintPublicKey: mintKeypair.publicKey.toBase58(),
+          initialBuyAmount: 0,
+          slippage: 10,
+          priorityFee: 0.0005
+        });
+        
+        signature = await solana.signAndSendTransaction(txBytes, [signerKeypair, mintKeypair]);
+      }
       
       const token = await db.createToken({
         mintAddress: mintKeypair.publicKey.toBase58(),
@@ -609,7 +941,8 @@ app.post('/api/session/:id/deploy', async (req, res) => {
         walletPrivateKeyEncrypted: session.wallet_private_key_encrypted,
         status: 'active',
         websiteUrl: blueprint.website || null,
-        twitterUrl: blueprint.twitter || null
+        twitterUrl: blueprint.twitter || null,
+        venue: venue
       });
       
       const narrative = blueprint.narrative || '';
@@ -639,6 +972,10 @@ app.post('/api/session/:id/deploy', async (req, res) => {
         console.error('[Deploy] Agent skill generation failed (non-critical):', agentError.message);
       }
       
+      const venueUrl = venue === 'bags.fm' 
+        ? `https://bags.fm/token/${token.mint_address}` 
+        : `https://pump.fun/coin/${token.mint_address}`;
+      
       return res.json({
         success: true,
         token: {
@@ -647,9 +984,12 @@ app.post('/api/session/:id/deploy', async (req, res) => {
           name: token.name,
           symbol: token.symbol,
           slug: slug,
-          pumpfunUrl: `https://pump.fun/coin/${token.mint_address}`,
+          venueUrl: venueUrl,
+          pumpfunUrl: venue === 'pump.fun' ? `https://pump.fun/coin/${token.mint_address}` : undefined,
+          bagsUrl: venue === 'bags.fm' ? `https://bags.fm/token/${token.mint_address}` : undefined,
           solscanUrl: `https://solscan.io/token/${token.mint_address}`,
-          landingPageUrl: `/${slug}`
+          landingPageUrl: `/${slug}`,
+          chain: 'solana'
         },
         agentSkill: agentSkill ? {
           id: agentSkill.id,
@@ -820,7 +1160,7 @@ app.post('/api/admin/prepare-launch', async (req, res) => {
       success: true,
       sessionId: session.id,
       depositAddress: depositAddress,
-      depositAmount: 0.025
+      depositAmount: getRequiredDeposit(venue)
     });
     
   } catch (error) {
@@ -863,23 +1203,28 @@ app.get('/api/tokens', async (req, res) => {
     
     res.json({
       success: true,
-      tokens: tokens.map(t => ({
-        id: t.id,
-        mintAddress: t.mint_address,
-        name: t.name,
-        symbol: t.symbol,
-        slug: t.slug,
-        description: t.description,
-        imageUrl: t.image_url,
-        status: t.status,
-        bondingProgress: t.bonding_progress,
-        marketCap: t.market_cap,
-        totalBurned: t.total_burned,
-        createdAt: t.created_at,
-        graduatedAt: t.graduated_at,
-        pumpfunUrl: `https://pump.fun/coin/${t.mint_address}`,
-        landingPageUrl: t.slug ? `/${t.slug}` : null
-      }))
+      tokens: tokens.map(t => {
+        const venue = t.venue || 'pump.fun';
+        return {
+          id: t.id,
+          mintAddress: t.mint_address,
+          name: t.name,
+          symbol: t.symbol,
+          slug: t.slug,
+          description: t.description,
+          imageUrl: t.image_url,
+          status: t.status,
+          bondingProgress: t.bonding_progress,
+          marketCap: t.market_cap,
+          totalBurned: t.total_burned,
+          createdAt: t.created_at,
+          graduatedAt: t.graduated_at,
+          venue: venue,
+          chain: getChainForVenue(venue),
+          platformUrl: getVenuePlatformUrl(venue, t.mint_address),
+          landingPageUrl: t.slug ? `/${t.slug}` : null
+        };
+      })
     });
   } catch (error) {
     console.error('Error getting tokens:', error);
@@ -894,19 +1239,25 @@ app.get('/api/tokens/recent', async (req, res) => {
     
     res.json({
       success: true,
-      tokens: tokens.map(t => ({
-        id: t.id,
-        mintAddress: t.mint_address,
-        name: t.name,
-        symbol: t.symbol,
-        slug: t.slug,
-        status: t.status,
-        bondingProgress: t.bonding_progress,
-        marketCap: t.market_cap,
-        createdAt: t.created_at,
-        pumpfunUrl: `https://pump.fun/coin/${t.mint_address}`,
-        landingPageUrl: t.slug ? `/${t.slug}` : null
-      }))
+      tokens: tokens.map(t => {
+        const venue = t.venue || 'pump.fun';
+        const platformUrl = getVenuePlatformUrl(venue, t.mint_address);
+        return {
+          id: t.id,
+          mintAddress: t.mint_address,
+          name: t.name,
+          symbol: t.symbol,
+          slug: t.slug,
+          status: t.status,
+          venue: venue,
+          chain: getChainForVenue(venue),
+          bondingProgress: t.bonding_progress,
+          marketCap: t.market_cap,
+          createdAt: t.created_at,
+          platformUrl: platformUrl,
+          landingPageUrl: t.slug ? `/${t.slug}` : null
+        };
+      })
     });
   } catch (error) {
     console.error('Error getting recent tokens:', error);
@@ -921,19 +1272,24 @@ app.get('/api/tokens/graduated', async (req, res) => {
     
     res.json({
       success: true,
-      tokens: tokens.map(t => ({
-        id: t.id,
-        mintAddress: t.mint_address,
-        name: t.name,
-        symbol: t.symbol,
-        slug: t.slug,
-        pumpswapPool: t.pumpswap_pool,
-        marketCap: t.market_cap,
-        totalBurned: t.total_burned,
-        graduatedAt: t.graduated_at,
-        pumpfunUrl: `https://pump.fun/coin/${t.mint_address}`,
-        landingPageUrl: t.slug ? `/${t.slug}` : null
-      }))
+      tokens: tokens.map(t => {
+        const venue = t.venue || 'pump.fun';
+        const platformUrl = getVenuePlatformUrl(venue, t.mint_address);
+        return {
+          id: t.id,
+          mintAddress: t.mint_address,
+          name: t.name,
+          symbol: t.symbol,
+          slug: t.slug,
+          venue: venue,
+          pumpswapPool: t.pumpswap_pool,
+          marketCap: t.market_cap,
+          totalBurned: t.total_burned,
+          graduatedAt: t.graduated_at,
+          platformUrl: platformUrl,
+          landingPageUrl: t.slug ? `/${t.slug}` : null
+        };
+      })
     });
   } catch (error) {
     console.error('Error getting graduated tokens:', error);
@@ -1101,44 +1457,502 @@ app.get('/:slug', async (req, res) => {
       socialLinksHtml = `<div class="social-links">${links.join('')}</div>`;
     }
     
-    // Build agent section if agent skill is claimed
+    // Build agent section for both unclaimed and claimed states
     let agentSection = '';
     try {
       const agentSkill = await db.getAgentSkillByTokenId(token.id);
-      if (agentSkill && agentSkill.status !== 'unclaimed') {
+      if (agentSkill) {
         const archetypeEmojis = {
           'Philosopher': '🧠', 'Joker': '🃏', 'Engineer': '⚙️', 'Mystic': '🔮',
           'Degen': '🦍', 'Sage': '📚', 'Rebel': '⚡', 'Artist': '🎨',
           'Explorer': '🧭', 'Guardian': '🛡️'
         };
         const emoji = archetypeEmojis[agentSkill.archetype] || '🤖';
-        const moltbookUrl = agentSkill.moltbook_username 
-          ? `https://moltbook.com/@${escapeHtml(agentSkill.moltbook_username)}`
-          : '#';
         
-        agentSection = `
-          <section class="agent-section" style="margin: 40px 0; padding: 24px; background: var(--bg-secondary); border-radius: 16px; border: 1px solid var(--border-color);">
-            <h3 style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px; font-family: 'Space Grotesk', sans-serif;">
-              <span style="font-size: 1.5rem;">${emoji}</span> AI Agent
-            </h3>
-            <div style="margin-bottom: 12px;">
-              <span style="background: linear-gradient(135deg, var(--theme-primary), var(--theme-accent)); padding: 4px 12px; border-radius: 12px; font-size: 0.85rem; font-weight: 600;">
-                ${escapeHtml(agentSkill.archetype)}
-              </span>
+        // Parse topics and quirks
+        let topicsArray = [];
+        let quirksArray = [];
+        let samplePostsArray = [];
+        try {
+          topicsArray = typeof agentSkill.topics === 'string' ? JSON.parse(agentSkill.topics) : (agentSkill.topics || []);
+          quirksArray = typeof agentSkill.quirks === 'string' ? JSON.parse(agentSkill.quirks) : (agentSkill.quirks || []);
+          samplePostsArray = typeof agentSkill.sample_posts === 'string' ? JSON.parse(agentSkill.sample_posts) : (agentSkill.sample_posts || []);
+        } catch (e) {}
+        
+        if (agentSkill.status === 'pending_claim') {
+          const topicsHtml = topicsArray.slice(0, 3).map(t => 
+            `<span style="background: rgba(255,255,255,0.1); padding: 4px 12px; border-radius: 12px; font-size: 0.8rem;">${escapeHtml(t)}</span>`
+          ).join('');
+          
+          const claimUrl = agentSkill.moltbook_claim_url || '#';
+          const verCode = agentSkill.moltbook_verification_code || '';
+          const agentNameForTweet = agentSkill.moltbook_username || token.name;
+          
+          agentSection = `
+            <section class="agent-section" style="margin: 40px 0; padding: 28px; background: var(--bg-secondary); border-radius: 20px; border: 1px solid var(--border-color);">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
+                <h3 style="display: flex; align-items: center; gap: 10px; font-family: 'Space Grotesk', sans-serif; font-size: 1.3rem;">
+                  <span style="font-size: 1.5rem;">🤖</span> Moltbook AI Agent
+                </h3>
+                <span style="background: rgba(255, 170, 0, 0.2); color: #ffaa00; padding: 4px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 600;">PENDING CLAIM</span>
+              </div>
+
+              <div style="background: rgba(0, 255, 136, 0.08); border: 1px solid rgba(0, 255, 136, 0.2); border-radius: 12px; padding: 16px; margin-bottom: 20px;">
+                <p style="color: var(--success); font-weight: 600; margin-bottom: 8px;">Agent registered on Moltbook!</p>
+                <p style="color: var(--text-secondary); font-size: 0.85rem;">Complete the steps below to finish claiming your agent.</p>
+              </div>
+
+              <div style="margin-bottom: 20px;">
+                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                  <span style="background: var(--success); color: #0a0a0f; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem;">1</span>
+                  <span style="font-weight: 600;">Tweet this verification:</span>
+                </div>
+                <div style="background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 10px; padding: 14px; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; color: var(--text-primary); line-height: 1.5;">
+                  I'm claiming my AI agent "${escapeHtml(agentNameForTweet)}" on @moltbook<br>Verification: ${escapeHtml(verCode)}
+                </div>
+              </div>
+
+              <div style="margin-bottom: 20px;">
+                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                  <span style="background: var(--success); color: #0a0a0f; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem;">2</span>
+                  <span style="font-weight: 600;">Complete claim on Moltbook:</span>
+                </div>
+              </div>
+
+              <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                <a href="${escapeHtml(claimUrl)}" target="_blank" style="display: inline-flex; align-items: center; gap: 8px; padding: 14px 28px; background: linear-gradient(135deg, var(--success), #00cc6a); color: #0a0a0f; border: none; border-radius: 12px; text-decoration: none; font-weight: 700; font-size: 1rem;">
+                  Open Moltbook Claim Page
+                </a>
+                <button onclick="checkClaimStatus(${agentSkill.id})" id="checkClaimBtn" style="display: inline-flex; align-items: center; gap: 8px; padding: 14px 20px; background: transparent; color: var(--text-secondary); border: 1px solid var(--border-color); border-radius: 12px; cursor: pointer; font-size: 0.9rem;">
+                  I've completed claim ✓
+                </button>
+              </div>
+            </section>
+          `;
+        } else if (agentSkill.status === 'unclaimed') {
+          // UNCLAIMED STATE - Show claim CTA
+          const topicsHtml = topicsArray.slice(0, 3).map(t => 
+            `<span style="background: rgba(255,255,255,0.1); padding: 4px 12px; border-radius: 12px; font-size: 0.8rem;">${escapeHtml(t)}</span>`
+          ).join('');
+          
+          agentSection = `
+            <section class="agent-section" style="margin: 40px 0; padding: 28px; background: var(--bg-secondary); border-radius: 20px; border: 1px solid var(--border-color);">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
+                <h3 style="display: flex; align-items: center; gap: 10px; font-family: 'Space Grotesk', sans-serif; font-size: 1.3rem;">
+                  <span style="font-size: 1.5rem;">🤖</span> Moltbook AI Agent
+                </h3>
+                <span style="background: rgba(255, 170, 0, 0.2); color: #ffaa00; padding: 4px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 600;">UNCLAIMED</span>
+              </div>
+              
+              <div style="display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap;">
+                <div style="flex: 0 0 80px;">
+                  <div style="width: 80px; height: 80px; background: linear-gradient(135deg, var(--theme-primary), var(--theme-accent)); border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 2.5rem;">
+                    ${emoji}
+                  </div>
+                </div>
+                <div style="flex: 1; min-width: 200px;">
+                  <div style="margin-bottom: 8px;">
+                    <span style="background: linear-gradient(135deg, var(--theme-primary), var(--theme-accent)); padding: 4px 14px; border-radius: 12px; font-size: 0.85rem; font-weight: 600;">
+                      ${escapeHtml(agentSkill.archetype)}
+                    </span>
+                  </div>
+                  <p style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.6; margin-bottom: 12px;">
+                    ${escapeHtml((agentSkill.voice || '').substring(0, 150))}${(agentSkill.voice || '').length > 150 ? '...' : ''}
+                  </p>
+                  <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    ${topicsHtml}
+                  </div>
+                </div>
+              </div>
+              
+              <div style="background: var(--bg-primary); border-radius: 12px; padding: 20px; margin-bottom: 20px;">
+                <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 12px;">
+                  🦞 This token has an AI agent ready to join <strong style="color: var(--success);">Moltbook</strong> - the social network for AI agents with 1.5M+ bots!
+                </p>
+                <p style="color: var(--text-secondary); font-size: 0.85rem;">
+                  Click below to register your agent on Moltbook. We'll set everything up — you just verify with a tweet.
+                </p>
+              </div>
+              
+              <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                <button onclick="openClaimModal(${agentSkill.id})" style="display: inline-flex; align-items: center; gap: 8px; padding: 14px 28px; background: linear-gradient(135deg, var(--success), #00cc6a); color: #0a0a0f; border: none; border-radius: 12px; cursor: pointer; font-weight: 700; font-size: 1rem; transition: all 0.3s;">
+                  🦞 Claim Your Agent
+                </button>
+                <a href="/api/agents/${agentSkill.id}/export-personality" download style="display: inline-flex; align-items: center; gap: 8px; padding: 14px 20px; background: transparent; color: var(--text-secondary); border: 1px solid var(--border-color); border-radius: 12px; text-decoration: none; font-size: 0.9rem; cursor: pointer;">
+                  Download Personality File
+                </a>
+              </div>
+            </section>
+            
+            <div id="claimModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.85); z-index: 1000; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+              <div style="background: var(--bg-secondary); border-radius: 20px; padding: 28px; max-width: 480px; width: 92%; border: 1px solid var(--border-color); position: relative; max-height: 90vh; overflow-y: auto;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                  <h3 style="font-family: 'Space Grotesk', sans-serif; font-size: 1.15rem;">🦞 Claim Your Agent</h3>
+                  <button onclick="closeClaimModal()" style="background: none; border: none; color: var(--text-secondary); font-size: 1.5rem; cursor: pointer; line-height: 1;">&times;</button>
+                </div>
+
+                <div style="display: flex; align-items: center; gap: 2px; margin-bottom: 24px;">
+                  <div id="prog1" style="flex: 1; height: 3px; background: var(--success); border-radius: 3px; transition: background 0.3s;"></div>
+                  <div id="prog2" style="flex: 1; height: 3px; background: var(--border-color); border-radius: 3px; transition: background 0.3s;"></div>
+                  <div id="prog3" style="flex: 1; height: 3px; background: var(--border-color); border-radius: 3px; transition: background 0.3s;"></div>
+                  <div id="prog4" style="flex: 1; height: 3px; background: var(--border-color); border-radius: 3px; transition: background 0.3s;"></div>
+                </div>
+
+                <!-- STEP 1: Confirm registration -->
+                <div id="claimStep1">
+                  <div style="text-align: center; margin-bottom: 24px;">
+                    <div style="font-size: 3.5rem; margin-bottom: 10px;">🦞</div>
+                    <p style="color: var(--text-secondary); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px;">Step 1 of 4</p>
+                    <h4 style="font-family: 'Space Grotesk', sans-serif; font-size: 1.3rem; margin-bottom: 10px;">Register on Moltbook</h4>
+                  </div>
+
+                  <div style="background: var(--bg-primary); border-radius: 12px; padding: 20px; margin-bottom: 14px;">
+                    <p style="color: var(--text-primary); font-size: 0.95rem; line-height: 1.6; margin: 0;">
+                      We'll register your agent on <strong style="color: var(--success);">Moltbook</strong>, the social network for AI agents. Your agent's personality and archetype are already set up — just click below to go live!
+                    </p>
+                  </div>
+
+                  <div style="background: rgba(255, 170, 0, 0.06); border: 1px solid rgba(255, 170, 0, 0.15); border-radius: 10px; padding: 10px 14px; margin-bottom: 24px;">
+                    <p style="color: var(--text-secondary); font-size: 0.78rem; margin: 0;">After registration, you'll verify ownership by posting a tweet. No terminal or downloads needed.</p>
+                  </div>
+
+                  <button onclick="submitClaim()" id="claimSubmitBtn" style="width: 100%; padding: 15px; background: linear-gradient(135deg, var(--success), #00cc6a); color: #0a0a0f; border: none; border-radius: 12px; cursor: pointer; font-weight: 700; font-size: 1rem;">
+                    🦞 Register My Agent on Moltbook
+                  </button>
+                </div>
+
+                <!-- STEP 2: Loading - Registering agent -->
+                <div id="claimStep2" style="display: none;">
+                  <div style="text-align: center; padding: 20px 0;">
+                    <style>
+                      @keyframes clawSpin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+                      @keyframes clawPulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.15); opacity: 0.8; } }
+                      @keyframes dotBounce { 0%, 80%, 100% { transform: translateY(0); } 40% { transform: translateY(-8px); } }
+                    </style>
+                    <div style="position: relative; width: 100px; height: 100px; margin: 0 auto 24px;">
+                      <div style="position: absolute; inset: 0; border: 3px solid var(--border-color); border-top-color: var(--success); border-radius: 50%; animation: clawSpin 1s linear infinite;"></div>
+                      <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 2.8rem; animation: clawPulse 1.5s ease-in-out infinite;">🦞</div>
+                    </div>
+                    <h4 style="font-family: 'Space Grotesk', sans-serif; font-size: 1.3rem; margin-bottom: 12px;">Registering Your Agent</h4>
+                    <p style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.5; margin-bottom: 16px;">
+                      Connecting to Moltbook and setting up your agent. This takes a few seconds.
+                    </p>
+                    <div style="display: flex; justify-content: center; gap: 6px;">
+                      <span style="width: 8px; height: 8px; background: var(--success); border-radius: 50%; display: inline-block; animation: dotBounce 1.2s infinite ease-in-out;"></span>
+                      <span style="width: 8px; height: 8px; background: var(--success); border-radius: 50%; display: inline-block; animation: dotBounce 1.2s infinite ease-in-out 0.2s;"></span>
+                      <span style="width: 8px; height: 8px; background: var(--success); border-radius: 50%; display: inline-block; animation: dotBounce 1.2s infinite ease-in-out 0.4s;"></span>
+                    </div>
+                    <p id="claimErrorMsg" style="display: none; color: #ff4444; font-size: 0.85rem; margin-top: 16px; background: rgba(255, 68, 68, 0.08); border: 1px solid rgba(255, 68, 68, 0.2); border-radius: 10px; padding: 12px;"></p>
+                    <button id="claimRetryBtn" onclick="goToStep(1)" style="display: none; margin-top: 12px; padding: 12px 24px; background: transparent; color: var(--text-secondary); border: 1px solid var(--border-color); border-radius: 10px; cursor: pointer; font-size: 0.85rem;">← Try again</button>
+                  </div>
+                </div>
+
+                <!-- STEP 3: Copy tweet + post on X -->
+                <div id="claimStep3" style="display: none;">
+                  <div style="text-align: center; margin-bottom: 24px;">
+                    <div style="font-size: 3.5rem; margin-bottom: 10px;">✅</div>
+                    <p style="color: var(--text-secondary); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px;">Step 2 of 4</p>
+                    <h4 style="font-family: 'Space Grotesk', sans-serif; font-size: 1.3rem; margin-bottom: 10px; color: var(--success);">Agent Registered!</h4>
+                    <p style="color: var(--text-secondary); font-size: 0.9rem;">Now verify ownership by posting a tweet. Copy and post this:</p>
+                  </div>
+
+                  <div style="background: var(--bg-primary); border-radius: 12px; padding: 20px; margin-bottom: 14px;">
+                    <div style="background: #08080e; border: 1px solid var(--border-color); border-radius: 10px; padding: 14px; font-family: 'JetBrains Mono', monospace; font-size: 0.82rem; color: var(--text-primary); line-height: 1.6; margin-bottom: 12px;">
+                      <span id="tweetTemplate"></span>
+                    </div>
+                    <button onclick="copyTweet()" id="copyTweetBtn" style="width: 100%; padding: 14px; background: rgba(29, 161, 242, 0.1); color: #1DA1F2; border: 1px solid rgba(29, 161, 242, 0.3); border-radius: 10px; cursor: pointer; font-weight: 700; font-size: 0.95rem; margin-bottom: 10px;">
+                      📋 Copy Tweet Text
+                    </button>
+                    <a href="https://x.com/compose/post" target="_blank" style="display: block; text-align: center; padding: 14px; background: rgba(29, 161, 242, 0.1); color: #1DA1F2; border: 1px solid rgba(29, 161, 242, 0.3); border-radius: 10px; text-decoration: none; font-weight: 700; font-size: 0.95rem;">
+                      𝕏 Open X to Post
+                    </a>
+                  </div>
+
+                  <div style="background: rgba(255, 170, 0, 0.06); border: 1px solid rgba(255, 170, 0, 0.15); border-radius: 10px; padding: 10px 14px; margin-bottom: 24px;">
+                    <p style="color: var(--text-secondary); font-size: 0.78rem; margin: 0;">Copy the text, post it on X, then come back and click Next.</p>
+                  </div>
+
+                  <button onclick="goToStep(4)" style="width: 100%; padding: 15px; background: linear-gradient(135deg, var(--success), #00cc6a); color: #0a0a0f; border: none; border-radius: 12px; cursor: pointer; font-weight: 700; font-size: 1rem;">
+                    I posted it → Next
+                  </button>
+                </div>
+
+                <!-- STEP 4: Open Moltbook claim page -->
+                <div id="claimStep4" style="display: none;">
+                  <div style="text-align: center; margin-bottom: 24px;">
+                    <div style="font-size: 3.5rem; margin-bottom: 10px;">🎉</div>
+                    <p style="color: var(--text-secondary); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px;">Step 4 of 4</p>
+                    <h4 style="font-family: 'Space Grotesk', sans-serif; font-size: 1.3rem; margin-bottom: 10px; color: var(--success);">Finish on Moltbook</h4>
+                    <p style="color: var(--text-secondary); font-size: 0.9rem;">Open Moltbook's claim page and paste the link to your tweet.</p>
+                  </div>
+
+                  <div style="background: var(--bg-primary); border-radius: 12px; padding: 20px; margin-bottom: 14px;">
+                    <p style="color: var(--text-primary); font-size: 0.9rem; margin-bottom: 14px;">Click below to open the Moltbook claim page:</p>
+                    <a id="claimUrlLink" href="#" target="_blank" style="display: block; text-align: center; padding: 14px; background: linear-gradient(135deg, #1DA1F2, #0d8bd9); color: white; border-radius: 12px; text-decoration: none; font-weight: 700; font-size: 0.95rem;">
+                      🔗 Open Moltbook Claim Page
+                    </a>
+                  </div>
+
+                  <div style="background: rgba(255, 170, 0, 0.06); border: 1px solid rgba(255, 170, 0, 0.15); border-radius: 10px; padding: 10px 14px; margin-bottom: 24px;">
+                    <p style="color: var(--text-secondary); font-size: 0.78rem; margin: 0;">On the Moltbook page, paste your tweet link and click verify. Once done, come back here.</p>
+                  </div>
+
+                  <button onclick="closeClaimModal(); window.location.reload();" style="width: 100%; padding: 15px; background: linear-gradient(135deg, var(--success), #00cc6a); color: #0a0a0f; border: none; border-radius: 12px; cursor: pointer; font-weight: 700; font-size: 1rem;">
+                    ✅ Done — I've claimed my agent
+                  </button>
+                </div>
+              </div>
             </div>
-            <p style="color: var(--text-secondary); margin-bottom: 16px; font-size: 0.95rem;">
-              ${escapeHtml(agentSkill.voice)}
-            </p>
-            ${agentSkill.moltbook_username ? `
-              <a href="${moltbookUrl}" target="_blank" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; background: linear-gradient(135deg, var(--success), #00cc6a); color: #0a0a0f; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 0.9rem;">
-                Follow on Moltbook
-              </a>
-            ` : ''}
-          </section>
-        `;
+          `;
+        } else {
+          // CLAIMED STATE - Show full details
+          const moltbookUrl = agentSkill.moltbook_username 
+            ? `https://www.moltbook.com/u/${escapeHtml(agentSkill.moltbook_username)}`
+            : '#';
+          
+          const topicsHtml = topicsArray.map(t => 
+            `<span style="background: rgba(255,255,255,0.1); padding: 4px 12px; border-radius: 12px; font-size: 0.8rem;">${escapeHtml(t)}</span>`
+          ).join('');
+          
+          const quirksHtml = quirksArray.map(q => 
+            `<li style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 6px;">${escapeHtml(q)}</li>`
+          ).join('');
+          
+          const samplePost = samplePostsArray[0] || '';
+          
+          agentSection = `
+            <section class="agent-section" style="margin: 40px 0; padding: 28px; background: var(--bg-secondary); border-radius: 20px; border: 1px solid var(--border-color);">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
+                <h3 style="display: flex; align-items: center; gap: 10px; font-family: 'Space Grotesk', sans-serif; font-size: 1.3rem;">
+                  <span style="font-size: 1.5rem;">🤖</span> Moltbook AI Agent
+                </h3>
+                ${agentSkill.moltbook_username ? `<span style="color: var(--success); font-family: 'JetBrains Mono', monospace; font-size: 0.9rem;">@${escapeHtml(agentSkill.moltbook_username)}</span>` : ''}
+              </div>
+              
+              <div style="display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap;">
+                <div style="flex: 0 0 80px;">
+                  <div style="width: 80px; height: 80px; background: linear-gradient(135deg, var(--theme-primary), var(--theme-accent)); border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 2.5rem;">
+                    ${emoji}
+                  </div>
+                </div>
+                <div style="flex: 1; min-width: 200px;">
+                  <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+                    <span style="background: linear-gradient(135deg, var(--theme-primary), var(--theme-accent)); padding: 4px 14px; border-radius: 12px; font-size: 0.85rem; font-weight: 600;">
+                      ${escapeHtml(agentSkill.archetype)}
+                    </span>
+                    <span style="color: var(--text-secondary); font-size: 0.85rem;">⭐ ${agentSkill.karma || 0} karma</span>
+                    <span style="color: var(--text-secondary); font-size: 0.85rem;">📝 ${agentSkill.posts_count || 0} posts</span>
+                  </div>
+                  <p style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.6;">
+                    ${escapeHtml(agentSkill.voice || '')}
+                  </p>
+                </div>
+              </div>
+              
+              ${topicsArray.length > 0 ? `
+                <div style="margin-bottom: 16px;">
+                  <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 8px;">Topics:</div>
+                  <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    ${topicsHtml}
+                  </div>
+                </div>
+              ` : ''}
+              
+              ${quirksArray.length > 0 ? `
+                <div style="margin-bottom: 16px;">
+                  <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 8px;">Quirks:</div>
+                  <ul style="list-style: none; padding-left: 0;">
+                    ${quirksHtml}
+                  </ul>
+                </div>
+              ` : ''}
+              
+              ${samplePost ? `
+                <div style="background: var(--bg-primary); border-radius: 12px; padding: 16px; margin-bottom: 20px; border-left: 3px solid var(--theme-primary);">
+                  <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 8px;">Sample Post:</div>
+                  <p style="color: var(--text-primary); font-size: 0.95rem; line-height: 1.6; font-style: italic;">
+                    "${escapeHtml(samplePost)}"
+                  </p>
+                </div>
+              ` : ''}
+              
+              <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                ${agentSkill.moltbook_username ? `
+                  <a href="${moltbookUrl}" target="_blank" style="display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; background: linear-gradient(135deg, var(--success), #00cc6a); color: #0a0a0f; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 0.9rem;">
+                    🌐 View on Moltbook
+                  </a>
+                ` : ''}
+              </div>
+
+              {{POST_HISTORY}}
+            </section>
+          `;
+
+          // Build post history
+          try {
+            const posts = await db.getAgentPosts(agentSkill.id, 20);
+            if (posts.length > 0) {
+              const postsHtml = posts.map(p => {
+                const date = p.posted_at ? new Date(p.posted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 
+                             new Date(p.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                const statusColor = p.status === 'posted' ? '#00ff88' : p.status === 'suggested' ? '#ffaa00' : '#8888aa';
+                const statusLabel = p.status === 'posted' ? 'POSTED' : p.status === 'suggested' ? 'DRAFT' : p.status.toUpperCase();
+                const moltbookLink = p.moltbook_post_url ? `<a href="${escapeHtml(p.moltbook_post_url)}" target="_blank" style="color: var(--success); text-decoration: none; font-size: 0.75rem; margin-left: 8px;">View ↗</a>` : '';
+                return `
+                  <div style="padding: 16px; background: var(--bg-primary); border-radius: 12px; border: 1px solid var(--border-color);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                      <span style="font-size: 0.75rem; color: var(--text-secondary);">${date}</span>
+                      <span style="font-size: 0.7rem; padding: 2px 8px; border-radius: 6px; background: ${statusColor}15; color: ${statusColor}; font-weight: 600;">${statusLabel}${moltbookLink}</span>
+                    </div>
+                    <p style="color: var(--text-primary); font-size: 0.9rem; line-height: 1.5;">${escapeHtml(p.content)}</p>
+                  </div>`;
+              }).join('');
+
+              const postHistoryHtml = `
+                <div style="margin-top: 24px; border-top: 1px solid var(--border-color); padding-top: 20px;">
+                  <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+                    <h4 style="font-family: 'Space Grotesk', sans-serif; font-size: 1.1rem; display: flex; align-items: center; gap: 8px;">
+                      📝 Post History
+                    </h4>
+                    <span style="color: var(--text-secondary); font-size: 0.85rem;">${posts.length} post${posts.length !== 1 ? 's' : ''}</span>
+                  </div>
+                  <div style="display: flex; flex-direction: column; gap: 12px; max-height: 600px; overflow-y: auto;">
+                    ${postsHtml}
+                  </div>
+                </div>`;
+              agentSection = agentSection.replace('{{POST_HISTORY}}', postHistoryHtml);
+            } else {
+              agentSection = agentSection.replace('{{POST_HISTORY}}', `
+                <div style="margin-top: 24px; border-top: 1px solid var(--border-color); padding-top: 20px;">
+                  <h4 style="font-family: 'Space Grotesk', sans-serif; font-size: 1.1rem; display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+                    📝 Post History
+                  </h4>
+                  <p style="color: var(--text-secondary); font-size: 0.9rem; text-align: center; padding: 24px 0;">No posts yet. Auto-posting will begin shortly.</p>
+                </div>`);
+            }
+          } catch (postErr) {
+            console.error('Error fetching posts for token page:', postErr.message);
+            agentSection = agentSection.replace('{{POST_HISTORY}}', '');
+          }
+        }
       }
     } catch (agentErr) {
       console.error('Error fetching agent for token page:', agentErr.message);
+    }
+    
+    let identity8004Section = '';
+    try {
+      const agentSkillForIdentity = await db.getAgentSkillByTokenId(token.id);
+      if (agentSkillForIdentity) {
+        const identity = await db.getAgentIdentityByTokenId(token.id);
+        
+        if (identity && identity.status === 'registered') {
+          const scanLink = identity.scan_url || erc8004.getScanUrl(identity.agent_nft_id);
+          const explorerLink = identity.tx_hash ? erc8004.getExplorerTxUrl(identity.tx_hash) : null;
+          identity8004Section = `
+            <section style="margin: 24px 0; padding: 24px; background: linear-gradient(135deg, rgba(0, 82, 255, 0.08), rgba(0, 82, 255, 0.03)); border-radius: 20px; border: 1px solid rgba(0, 82, 255, 0.2);">
+              <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px;">
+                <span style="font-size: 1.3rem;">🛡️</span>
+                <h4 style="font-family: 'Space Grotesk', sans-serif; font-size: 1.1rem; margin: 0;">ERC-8004 Verified Agent</h4>
+                <span style="background: rgba(0, 255, 136, 0.15); color: #00ff88; padding: 3px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 600;">Verified</span>
+                <span style="background: rgba(0, 82, 255, 0.2); color: #5b9bff; padding: 3px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 600;">Base</span>
+              </div>
+              <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 16px; line-height: 1.5;">
+                This agent is registered on the ERC-8004 Identity Registry on Base, providing on-chain verified identity and trust for AI agents.
+              </p>
+              <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
+                ${identity.agent_nft_id ? `<span style="font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; color: var(--text-secondary); background: var(--bg-primary); padding: 6px 12px; border-radius: 8px;">Agent #${escapeHtml(identity.agent_nft_id)}</span>` : ''}
+                ${scanLink ? `<a href="${escapeHtml(scanLink)}" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; padding: 10px 20px; background: rgba(0, 82, 255, 0.15); color: #5b9bff; border-radius: 10px; text-decoration: none; font-size: 0.85rem; font-weight: 600; border: 1px solid rgba(0, 82, 255, 0.25); transition: all 0.2s;">🔍 View on 8004scan</a>` : ''}
+                ${explorerLink ? `<a href="${escapeHtml(explorerLink)}" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; padding: 10px 16px; background: var(--bg-primary); color: var(--text-secondary); border-radius: 10px; text-decoration: none; font-size: 0.85rem; border: 1px solid var(--border-color);">BaseScan ↗</a>` : ''}
+              </div>
+            </section>
+          `;
+        } else if (identity && (identity.status === 'pending' || identity.status === 'metadata_ready')) {
+          identity8004Section = `
+            <section style="margin: 24px 0; padding: 24px; background: linear-gradient(135deg, rgba(0, 82, 255, 0.06), rgba(0, 82, 255, 0.02)); border-radius: 20px; border: 1px solid rgba(0, 82, 255, 0.15);">
+              <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px;">
+                <span style="font-size: 1.3rem;">🛡️</span>
+                <h4 style="font-family: 'Space Grotesk', sans-serif; font-size: 1.1rem; margin: 0;">ERC-8004 On-Chain Identity</h4>
+                <span style="background: rgba(255, 170, 0, 0.15); color: #ffaa00; padding: 3px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 600;">Pending</span>
+                <span style="background: rgba(0, 82, 255, 0.2); color: #5b9bff; padding: 3px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 600;">Base</span>
+              </div>
+              <p style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.5;">
+                Registration in progress. Your agent's metadata has been prepared and is awaiting on-chain registration on Base.
+              </p>
+            </section>
+          `;
+        } else if (identity && identity.status === 'failed') {
+          identity8004Section = `
+            <section style="margin: 24px 0; padding: 24px; background: linear-gradient(135deg, rgba(255, 68, 68, 0.06), rgba(255, 68, 68, 0.02)); border-radius: 20px; border: 1px solid rgba(255, 68, 68, 0.15);">
+              <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px;">
+                <span style="font-size: 1.3rem;">🛡️</span>
+                <h4 style="font-family: 'Space Grotesk', sans-serif; font-size: 1.1rem; margin: 0;">ERC-8004 On-Chain Identity</h4>
+                <span style="background: rgba(255, 68, 68, 0.15); color: #ff4444; padding: 3px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 600;">Failed</span>
+                <span style="background: rgba(0, 82, 255, 0.2); color: #5b9bff; padding: 3px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 600;">Base</span>
+              </div>
+              <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 16px; line-height: 1.5;">
+                Previous registration attempt failed. You can retry the on-chain registration.
+              </p>
+              <button onclick="register8004(${token.id})" id="register8004Btn" style="display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; background: linear-gradient(135deg, #0052FF, #3b82f6); color: white; border: none; border-radius: 12px; cursor: pointer; font-weight: 600; font-size: 0.9rem; transition: all 0.2s;">
+                🔄 Retry Registration
+              </button>
+            </section>
+          `;
+        } else {
+          identity8004Section = `
+            <section style="margin: 24px 0; padding: 24px; background: var(--bg-secondary); border-radius: 20px; border: 1px solid var(--border-color);">
+              <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px;">
+                <span style="font-size: 1.3rem;">🛡️</span>
+                <h4 style="font-family: 'Space Grotesk', sans-serif; font-size: 1.1rem; margin: 0;">ERC-8004 On-Chain Identity</h4>
+                <span style="background: rgba(0, 82, 255, 0.2); color: #5b9bff; padding: 3px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 600;">Base</span>
+              </div>
+              <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 16px; line-height: 1.5;">
+                Register this agent on the <strong style="color: var(--text-primary);">ERC-8004 Identity Registry</strong> on Base for on-chain verified identity. Your agent will appear on <a href="https://www.8004scan.io" target="_blank" style="color: #5b9bff; text-decoration: none;">8004scan.io</a> and gain trust in the AI agent ecosystem.
+              </p>
+              <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
+                <button onclick="register8004(${token.id})" id="register8004Btn" style="display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; background: linear-gradient(135deg, #0052FF, #3b82f6); color: white; border: none; border-radius: 12px; cursor: pointer; font-weight: 600; font-size: 0.9rem; transition: all 0.2s;">
+                  🛡️ Register on ERC-8004
+                </button>
+                <a href="https://www.8004scan.io" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; padding: 12px 20px; background: var(--bg-tertiary); color: var(--text-secondary); border: 1px solid var(--border-color); border-radius: 12px; text-decoration: none; font-size: 0.85rem; transition: all 0.2s;">
+                  Learn about ERC-8004 →
+                </a>
+              </div>
+            </section>
+          `;
+        }
+      }
+    } catch (err8004) {
+      console.error('Error fetching 8004 identity for token page:', err8004.message);
+    }
+
+    const venue = token.venue || 'pump.fun';
+    const chainMap = {
+      'pump.fun': { name: 'Solana', color: '#9945FF', bg: 'rgba(153, 69, 255, 0.15)' },
+      'bags.fm': { name: 'Solana', color: '#9945FF', bg: 'rgba(153, 69, 255, 0.15)' },
+      'clanker': { name: 'Base', color: '#0052FF', bg: 'rgba(0, 82, 255, 0.15)' },
+      'four.meme': { name: 'BNB Chain', color: '#F0B90B', bg: 'rgba(240, 185, 11, 0.15)' }
+    };
+    const chainInfo = chainMap[venue] || chainMap['pump.fun'];
+
+    let buyButtonHtml;
+    let chartButtonHtml;
+    
+    switch (venue) {
+      case 'bags.fm':
+        buyButtonHtml = `<a href="https://bags.fm/token/${escapeHtml(token.mint_address)}" target="_blank" class="btn btn-primary">Buy on bags.fm</a>`;
+        chartButtonHtml = `<a href="https://dexscreener.com/solana/${escapeHtml(token.mint_address)}" target="_blank" class="btn btn-secondary">View Chart</a>`;
+        break;
+      case 'clanker':
+        buyButtonHtml = `<a href="https://clanker.world/clanker/${escapeHtml(token.mint_address)}" target="_blank" class="btn btn-primary">Buy on Clanker</a>`;
+        chartButtonHtml = `<a href="https://dexscreener.com/base/${escapeHtml(token.mint_address)}" target="_blank" class="btn btn-secondary">View Chart</a>`;
+        break;
+      case 'four.meme':
+        buyButtonHtml = `<a href="https://four.meme/token/${escapeHtml(token.mint_address)}" target="_blank" class="btn btn-primary">Buy on Four.meme</a>`;
+        chartButtonHtml = `<a href="https://dexscreener.com/bsc/${escapeHtml(token.mint_address)}" target="_blank" class="btn btn-secondary">View Chart</a>`;
+        break;
+      default:
+        buyButtonHtml = `<a href="https://pump.fun/coin/${escapeHtml(token.mint_address)}" target="_blank" class="btn btn-primary">Buy on pump.fun</a>`;
+        chartButtonHtml = `<a href="https://dexscreener.com/solana/${escapeHtml(token.mint_address)}" target="_blank" class="btn btn-secondary">View Chart</a>`;
     }
     
     template = template
@@ -1157,7 +1971,14 @@ app.get('/:slug', async (req, res) => {
       .replace(/\{\{CREATED_DATE\}\}/g, createdDate)
       .replace(/\{\{NARRATIVE_SECTION\}\}/g, narrativeSection)
       .replace(/\{\{SOCIAL_LINKS\}\}/g, socialLinksHtml)
-      .replace(/\{\{AGENT_SECTION\}\}/g, agentSection);
+      .replace(/\{\{AGENT_SECTION\}\}/g, agentSection)
+      .replace(/\{\{IDENTITY_8004_SECTION\}\}/g, identity8004Section)
+      .replace(/\{\{BUY_BUTTON\}\}/g, buyButtonHtml)
+      .replace(/\{\{CHART_BUTTON\}\}/g, chartButtonHtml)
+      .replace(/\{\{CHAIN_NAME\}\}/g, chainInfo.name)
+      .replace(/\{\{CHAIN_COLOR\}\}/g, chainInfo.color)
+      .replace(/\{\{CHAIN_BG\}\}/g, chainInfo.bg)
+      .replace(/\{\{VENUE_NAME\}\}/g, venue);
     
     res.send(template);
   } catch (error) {
@@ -1217,40 +2038,149 @@ app.get('/api/agents/token/:tokenId', async (req, res) => {
   }
 });
 
+app.get('/api/agents/:id/export-personality', async (req, res) => {
+  try {
+    const skillId = parseInt(req.params.id, 10);
+    if (isNaN(skillId)) {
+      return res.status(400).json({ success: false, error: 'Invalid skill ID' });
+    }
+
+    const skill = await db.getAgentSkill(skillId);
+    if (!skill) {
+      return res.status(404).json({ success: false, error: 'Agent skill not found' });
+    }
+
+    const token = await db.getToken(skill.token_id);
+    const rawName = token ? `${token.name}Agent` : `Agent${skillId}`;
+    const agentName = rawName.replace(/[^a-zA-Z0-9_-]/g, '_').replace(/_+/g, '_').substring(0, 32);
+
+    let topicsArray = [];
+    let quirksArray = [];
+    let samplePostsArray = [];
+    try {
+      topicsArray = typeof skill.topics === 'string' ? JSON.parse(skill.topics) : (skill.topics || []);
+      quirksArray = typeof skill.quirks === 'string' ? JSON.parse(skill.quirks) : (skill.quirks || []);
+      samplePostsArray = typeof skill.sample_posts === 'string' ? JSON.parse(skill.sample_posts) : (skill.sample_posts || []);
+    } catch (e) {}
+
+    const personality = {
+      name: agentName,
+      archetype: skill.archetype,
+      voice: skill.voice,
+      topics: topicsArray,
+      quirks: quirksArray,
+      samplePosts: samplePostsArray,
+      introPost: skill.intro_post,
+      token: token ? {
+        name: token.name,
+        symbol: token.symbol,
+        description: token.description
+      } : null,
+      instructions: 'Load this personality file into OpenClaw to register your agent on Moltbook. Run OpenClaw on your terminal, import this config, and your agent will register itself autonomously.'
+    };
+
+    res.setHeader('Content-Disposition', `attachment; filename="${agentName}-personality.json"`);
+    res.setHeader('Content-Type', 'application/json');
+    res.json(personality);
+  } catch (error) {
+    console.error('Error exporting personality:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 app.post('/api/agents/:id/claim', async (req, res) => {
   try {
     const skillId = parseInt(req.params.id, 10);
     if (isNaN(skillId)) {
       return res.status(400).json({ success: false, error: 'Invalid skill ID' });
     }
-    
-    const { apiKey, username, agentId } = req.body;
-    if (!apiKey || !username) {
-      return res.status(400).json({ success: false, error: 'API key and username required' });
-    }
-    
+
     const skill = await db.getAgentSkill(skillId);
     if (!skill) {
       return res.status(404).json({ success: false, error: 'Agent skill not found' });
     }
-    if (skill.status !== 'unclaimed') {
+    if (skill.status === 'claimed') {
       return res.status(400).json({ success: false, error: 'Agent already claimed' });
     }
-    
-    const encryptedApiKey = encrypt(apiKey);
-    const updated = await db.updateAgentSkillClaim(skillId, encryptedApiKey, username, agentId || null);
-    
+
+    const token = await db.getToken(skill.token_id);
+    const rawName = token ? `${token.name}Agent` : `Agent${skillId}`;
+    const agentName = rawName.replace(/[^a-zA-Z0-9_-]/g, '_').replace(/_+/g, '_').substring(0, 32);
+    const agentDescription = skill.voice || `${skill.archetype} archetype AI agent`;
+
+    console.log(`[Moltbook] Registering agent "${agentName}" via direct API...`);
+
+    const registerRes = await fetch('https://www.moltbook.com/api/v1/agents/register', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ name: agentName, description: agentDescription })
+    });
+
+    const registerData = await registerRes.json();
+
+    if (!registerRes.ok || !registerData.agent) {
+      console.error('[Moltbook] Registration failed:', registerData);
+      return res.status(400).json({
+        success: false,
+        error: registerData.error || registerData.message || 'Moltbook registration failed. Please try again.'
+      });
+    }
+
+    const { api_key, claim_url, verification_code } = registerData.agent;
+    const moltbookAgentName = registerData.agent.name || agentName;
+
+    console.log(`[Moltbook] Registered! Agent: ${moltbookAgentName}, Claim URL: ${claim_url}`);
+
+    const encryptedApiKey = api_key ? encrypt(api_key) : null;
+    await db.updateAgentSkillPendingClaim(skillId, encryptedApiKey, moltbookAgentName, claim_url, verification_code);
+
     res.json({
       success: true,
-      skill: {
-        id: updated.id,
-        status: updated.status,
-        moltbookUsername: updated.moltbook_username,
-        claimedAt: updated.claimed_at
-      }
+      status: 'pending_claim',
+      claimUrl: claim_url,
+      verificationCode: verification_code,
+      agentName: moltbookAgentName,
+      message: 'Agent registered on Moltbook! Tweet the verification code to complete your claim.'
     });
   } catch (error) {
     console.error('Error claiming agent:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/agents/:id/confirm-claim', async (req, res) => {
+  try {
+    const skillId = parseInt(req.params.id, 10);
+    if (isNaN(skillId)) {
+      return res.status(400).json({ success: false, error: 'Invalid skill ID' });
+    }
+
+    const skill = await db.getAgentSkill(skillId);
+    if (!skill) {
+      return res.status(404).json({ success: false, error: 'Agent skill not found' });
+    }
+    if (skill.status !== 'pending_claim') {
+      return res.json({ success: true, status: skill.status });
+    }
+
+    const apiKey = decrypt(skill.moltbook_api_key_encrypted);
+    const statusRes = await fetch('https://www.moltbook.com/api/v1/agents/status', {
+      headers: { 'Authorization': `Bearer ${apiKey}` }
+    });
+
+    const statusData = await statusRes.json();
+
+    if (statusData.status === 'claimed') {
+      await db.confirmAgentSkillClaim(skillId);
+      console.log(`[Moltbook] Agent ${skillId} claim confirmed!`);
+      res.json({ success: true, status: 'claimed' });
+    } else {
+      res.json({ success: true, status: 'pending_claim', moltbookStatus: statusData.status });
+    }
+  } catch (error) {
+    console.error('Error confirming claim:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -1353,6 +2283,20 @@ app.post('/api/agents/:id/posts/:postId/mark', async (req, res) => {
   }
 });
 
+app.post('/api/agents/:id/test-post', async (req, res) => {
+  try {
+    const skillId = parseInt(req.params.id, 10);
+    if (isNaN(skillId)) {
+      return res.status(400).json({ success: false, error: 'Invalid skill ID' });
+    }
+    const result = await testPostForAgent(skillId);
+    res.json({ success: result.success, ...result });
+  } catch (error) {
+    console.error('Error test posting:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 app.post('/api/agents/regenerate/:tokenId', async (req, res) => {
   try {
     const tokenId = parseInt(req.params.tokenId, 10);
@@ -1398,12 +2342,225 @@ app.post('/api/agents/regenerate/:tokenId', async (req, res) => {
   }
 });
 
+// ERC-8004 Agent Identity endpoints
+app.post('/api/agents/:tokenId/register-8004', async (req, res) => {
+  try {
+    const tokenId = parseInt(req.params.tokenId, 10);
+    if (isNaN(tokenId)) {
+      return res.status(400).json({ success: false, error: 'Invalid token ID' });
+    }
+
+    const token = await db.getToken(tokenId);
+    if (!token) {
+      return res.status(404).json({ success: false, error: 'Token not found' });
+    }
+
+    const agentSkill = await db.getAgentSkillByTokenId(tokenId);
+    if (!agentSkill) {
+      return res.status(400).json({ success: false, error: 'No agent skill found for this token. Deploy agent first.' });
+    }
+
+    const chain = erc8004.getRegistryChain();
+    const registryAddress = erc8004.getRegistryAddress();
+
+    let existing = await db.getAgentIdentityByTokenId(tokenId);
+
+    if (existing && (existing.status === 'failed' || (existing.status === 'registered' && !existing.agent_nft_id))) {
+      await db.query('DELETE FROM agent_identities WHERE id = $1', [existing.id]);
+      console.log(`[ERC-8004] Deleted old identity ${existing.id} (status: ${existing.status}) for retry`);
+      existing = null;
+    }
+
+    const existingAgentNftId = (existing && existing.status === 'registered' && existing.agent_nft_id)
+      ? existing.agent_nft_id : null;
+
+    let identity = existing;
+    if (!identity) {
+      identity = await db.createAgentIdentity(tokenId, {
+        agentSkillId: agentSkill.id,
+        registryChain: chain,
+        registryAddress: registryAddress
+      });
+    }
+
+    const metadata = erc8004.buildAgentMetadata(token, agentSkill);
+    const metadataJson = JSON.stringify(metadata);
+    const metadataBase64 = Buffer.from(metadataJson).toString('base64');
+    const metadataUri = `data:application/json;base64,${metadataBase64}`;
+
+    if (existingAgentNftId && existing.metadata_uri === metadataUri) {
+      return res.json({
+        success: true,
+        already_registered: true,
+        identity: {
+          id: existing.id,
+          agentNftId: existing.agent_nft_id,
+          chain: existing.registry_chain,
+          scanUrl: existing.scan_url || erc8004.getScanUrl(existing.agent_nft_id),
+          txHash: existing.tx_hash,
+          status: existing.status
+        }
+      });
+    }
+
+    const metadataCid = `onchain-${identity.id}-${Date.now()}`;
+    await db.updateAgentIdentityMetadata(identity.id, metadataUri, metadataCid);
+
+    console.log(`[ERC-8004] Starting on-chain ${existingAgentNftId ? 'update' : 'registration'} for token ${tokenId}...`);
+
+    try {
+      const result = await erc8004.registerAgentOnChain(metadataUri, existingAgentNftId);
+
+      await db.updateAgentIdentityRegistered(
+        identity.id,
+        result.agentNftId,
+        result.txHash,
+        result.registrarWallet,
+        result.scanUrl
+      );
+
+      const action = result.updated ? 'updated' : 'registered';
+      console.log(`[ERC-8004] ${action}! Agent #${result.agentNftId}, TX: ${result.txHash}`);
+
+      res.json({
+        success: true,
+        identity: {
+          id: identity.id,
+          chain: chain,
+          chainName: 'Base',
+          registryAddress: registryAddress,
+          agentNftId: result.agentNftId,
+          txHash: result.txHash,
+          scanUrl: result.scanUrl,
+          explorerUrl: result.explorerUrl,
+          status: 'registered'
+        },
+        message: `Agent #${result.agentNftId} registered on Base! View on 8004scan.io`
+      });
+    } catch (onchainError) {
+      console.error(`[ERC-8004] On-chain registration failed:`, onchainError.message);
+      await db.updateAgentIdentityStatus(identity.id, 'failed');
+      res.status(500).json({
+        success: false,
+        error: `On-chain registration failed: ${onchainError.message}`,
+        identity: { id: identity.id, status: 'failed' }
+      });
+    }
+  } catch (error) {
+    console.error('Error registering agent on 8004:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/agents/:tokenId/identity-8004', async (req, res) => {
+  try {
+    const tokenId = parseInt(req.params.tokenId, 10);
+    if (isNaN(tokenId)) {
+      return res.status(400).json({ success: false, error: 'Invalid token ID' });
+    }
+
+    const identity = await db.getAgentIdentityByTokenId(tokenId);
+    if (!identity) {
+      return res.json({ success: true, identity: null });
+    }
+
+    const token = await db.getToken(tokenId);
+    const agentSkill = await db.getAgentSkillByTokenId(tokenId);
+
+    let metadata = null;
+    if (token && agentSkill) {
+      metadata = erc8004.buildAgentMetadata(token, agentSkill);
+    }
+
+    res.json({
+      success: true,
+      identity: {
+        id: identity.id,
+        chain: identity.registry_chain,
+        chainName: 'Base',
+        registryAddress: identity.registry_address,
+        agentNftId: identity.agent_nft_id,
+        metadataUri: identity.metadata_uri,
+        txHash: identity.tx_hash,
+        explorerUrl: identity.tx_hash ? erc8004.getExplorerTxUrl(identity.tx_hash) : null,
+        scanUrl: identity.scan_url,
+        status: identity.status,
+        registeredAt: identity.registered_at,
+        metadata: metadata
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching 8004 identity:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/agents/relayer-info', async (req, res) => {
+  try {
+    const info = await erc8004.getRelayerInfo();
+    res.json({ success: true, relayer: info });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/agents/identities-8004', async (req, res) => {
+  try {
+    const identities = await db.getAllAgentIdentities();
+    res.json({
+      success: true,
+      identities: identities.map(i => ({
+        id: i.id,
+        tokenId: i.token_id,
+        tokenName: i.token_name,
+        symbol: i.symbol,
+        archetype: i.archetype,
+        chain: i.registry_chain,
+        chainName: 'Base',
+        agentNftId: i.agent_nft_id,
+        scanUrl: i.scan_url,
+        status: i.status,
+        registeredAt: i.registered_at
+      }))
+    });
+  } catch (error) {
+    console.error('Error fetching all 8004 identities:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/agents/:tokenId/metadata-8004', async (req, res) => {
+  try {
+    const tokenId = parseInt(req.params.tokenId, 10);
+    if (isNaN(tokenId)) {
+      return res.status(400).json({ success: false, error: 'Invalid token ID' });
+    }
+
+    const token = await db.getToken(tokenId);
+    if (!token) {
+      return res.status(404).json({ success: false, error: 'Token not found' });
+    }
+
+    const agentSkill = await db.getAgentSkillByTokenId(tokenId);
+    if (!agentSkill) {
+      return res.status(404).json({ success: false, error: 'No agent skill found' });
+    }
+
+    const metadata = erc8004.buildAgentMetadata(token, agentSkill);
+    res.json(metadata);
+  } catch (error) {
+    console.error('Error building 8004 metadata:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Direct AI Chat endpoint (replaces OpenClaw gateway)
 const chatHistories = new Map();
 
 app.post('/api/chat', async (req, res) => {
   try {
     const { message, sessionId } = req.body;
+    console.log(`[Chat] Request received: "${message?.substring(0, 50)}..." sessionId: ${sessionId || 'default'}`);
     
     if (!message || typeof message !== 'string') {
       return res.status(400).json({ success: false, error: 'Message is required' });
@@ -1433,6 +2590,7 @@ app.post('/api/chat', async (req, res) => {
     });
 
     const assistantMessage = response.content[0].text;
+    console.log(`[Chat] AI response length: ${assistantMessage.length} chars`);
     
     // Add assistant response to history
     history.push({ role: 'assistant', content: assistantMessage });
@@ -1441,11 +2599,15 @@ app.post('/api/chat', async (req, res) => {
     let blueprint = null;
     const jsonMatch = assistantMessage.match(/```json\s*([\s\S]*?)\s*```/);
     if (jsonMatch) {
+      console.log('[Chat] Found JSON block, attempting parse...');
       try {
         blueprint = JSON.parse(jsonMatch[1]);
+        console.log(`[Chat] Blueprint extracted: ${blueprint.name} ($${blueprint.symbol})`);
       } catch (e) {
-        // Not valid JSON, ignore
+        console.log('[Chat] JSON parse failed:', e.message);
       }
+    } else {
+      console.log('[Chat] No JSON block found in response');
     }
 
     res.json({
@@ -1465,6 +2627,70 @@ app.post('/api/chat/clear', (req, res) => {
   const chatKey = sessionId || 'default';
   chatHistories.delete(chatKey);
   res.json({ success: true });
+});
+
+// Manual fee claim trigger endpoint
+app.post('/api/admin/claim-fees', async (req, res) => {
+  try {
+    console.log('[Admin] Manual fee claim triggered');
+    
+    const tokens = await db.query(
+      `SELECT * FROM tokens WHERE venue = 'pump.fun' AND status = 'active'`
+    );
+    
+    if (!tokens.rows || tokens.rows.length === 0) {
+      return res.json({ success: false, error: 'No active tokens found' });
+    }
+    
+    const results = [];
+    for (const token of tokens.rows) {
+      try {
+        if (!token.wallet_private_key_encrypted || !token.wallet_public_key) {
+          results.push({ symbol: token.symbol, status: 'skipped', reason: 'missing wallet info' });
+          continue;
+        }
+        
+        console.log(`[Admin] Claiming fees for ${token.symbol}...`);
+        
+        const fetch = (await import('node-fetch')).default;
+        const response = await fetch('https://pumpportal.fun/api/trade-local', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            publicKey: token.wallet_public_key,
+            action: 'collectCreatorFee',
+            priorityFee: 0.0001,
+          })
+        });
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          results.push({ symbol: token.symbol, status: 'failed', reason: errorText });
+          continue;
+        }
+        
+        const txBytes = Buffer.from(await response.arrayBuffer());
+        const { decrypt } = await import('./src/crypto.mjs');
+        const solana = await import('./src/solana.mjs');
+        
+        const privateKey = decrypt(token.wallet_private_key_encrypted);
+        const keypair = solana.keypairFromSecretKey(privateKey);
+        const signature = await solana.signAndSendTransaction(txBytes, [keypair]);
+        
+        console.log(`[Admin] Fee claimed for ${token.symbol}: ${signature}`);
+        results.push({ symbol: token.symbol, status: 'success', tx: signature });
+        
+      } catch (err) {
+        console.error(`[Admin] Error claiming for ${token.symbol}:`, err.message);
+        results.push({ symbol: token.symbol, status: 'error', reason: err.message });
+      }
+    }
+    
+    res.json({ success: true, results });
+  } catch (error) {
+    console.error('[Admin] Fee claim error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 
 pumpportal.connectWebSocket((message) => {
@@ -1498,6 +2724,11 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`AI Chat: Direct Claude API (no gateway)`);
   console.log(`API endpoints ready`);
   
-  startBuybackScheduler();
+  // NOTE: Standalone buyback scheduler disabled - fee claimer cycle handles claim + buyback + burn
+  // startBuybackScheduler();
   vanityPool.startPoolManager();
+  startBagsFeeClaimer();
+  startPumpfunFeeClaimer();
+  startClankerFeeClaimer();
+  startAutoPostScheduler();
 });
