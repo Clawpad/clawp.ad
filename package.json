@@ -11,14 +11,19 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.72.1",
+    "@bagsfm/bags-sdk": "^1.2.7",
+    "@meteora-ag/dynamic-bonding-curve-sdk": "^1.5.2",
     "@solana/spl-token": "^0.4.14",
     "@solana/web3.js": "^1.98.4",
     "bs58": "^6.0.0",
+    "clanker-sdk": "^4.2.10",
+    "ethers": "^6.16.0",
     "express": "^4.21.2",
     "form-data": "^4.0.0",
     "node-fetch": "^3.3.2",
     "openai": "^6.17.0",
     "pg": "^8.18.0",
+    "viem": "^2.45.1",
     "ws": "^8.19.0"
   },
   "engines": {
