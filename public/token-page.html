@@ -415,18 +415,18 @@
             </div>
             <h1 class="token-name">{{TOKEN_NAME}}</h1>
             <p class="token-symbol">${{TOKEN_SYMBOL}}</p>
+            <div style="display: flex; align-items: center; gap: 10px; justify-content: center; margin-bottom: 8px;">
+                <span style="font-size: 0.75rem; padding: 4px 12px; border-radius: 8px; background: {{CHAIN_BG}}; color: {{CHAIN_COLOR}}; font-weight: 700; letter-spacing: 0.5px;">{{CHAIN_NAME}}</span>
+                <span style="font-size: 0.65rem; padding: 3px 8px; border-radius: 6px; background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.5);">{{VENUE_NAME}}</span>
+            </div>
             <div class="status-badge {{TOKEN_STATUS}}">
                 <span class="status-dot"></span>
                 {{TOKEN_STATUS_TEXT}}
             </div>
             <p class="token-description">{{TOKEN_DESCRIPTION}}</p>
             <div class="cta-buttons">
-                <a href="https://pump.fun/coin/{{MINT_ADDRESS}}" target="_blank" class="btn btn-primary">
-                    Buy on pump.fun
-                </a>
-                <a href="https://dexscreener.com/solana/{{MINT_ADDRESS}}" target="_blank" class="btn btn-secondary">
-                    View Chart
-                </a>
+                {{BUY_BUTTON}}
+                {{CHART_BUTTON}}
             </div>
             {{SOCIAL_LINKS}}
         </section>
@@ -434,6 +434,8 @@
         {{NARRATIVE_SECTION}}
 
         {{AGENT_SECTION}}
+
+        {{IDENTITY_8004_SECTION}}
 
         <div class="stats-grid">
             <div class="stat-card">
@@ -478,12 +480,167 @@
     </div>
 
     <script>
+        let currentSkillId = null;
+        
         function copyContract() {
             const address = document.getElementById('contractAddress').textContent;
             navigator.clipboard.writeText(address).then(() => {
                 alert('Contract address copied!');
             });
         }
+        
+        function openClaimModal(skillId) {
+            currentSkillId = skillId;
+            const modal = document.getElementById('claimModal');
+            goToStep(1);
+            modal.style.display = 'flex';
+        }
+
+        function closeClaimModal() {
+            document.getElementById('claimModal').style.display = 'none';
+        }
+
+        function goToStep(step) {
+            for (let i = 1; i <= 4; i++) {
+                const el = document.getElementById('claimStep' + i);
+                if (el) el.style.display = i === step ? 'block' : 'none';
+            }
+            for (let i = 1; i <= 4; i++) {
+                const bar = document.getElementById('prog' + i);
+                if (bar) bar.style.background = i <= step ? 'var(--success)' : 'var(--border-color)';
+            }
+        }
+
+        function copyText(text, btn) {
+            navigator.clipboard.writeText(text).then(() => {
+                btn.textContent = '✓ Copied!';
+                setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+            });
+        }
+
+        function copyTweet() {
+            const text = document.getElementById('tweetTemplate').textContent;
+            const btn = document.getElementById('copyTweetBtn');
+            navigator.clipboard.writeText(text).then(() => {
+                btn.textContent = '✅ Copied!';
+                setTimeout(() => { btn.textContent = '📋 Copy Tweet Text'; }, 2000);
+            });
+        }
+
+        async function submitClaim() {
+            const btn = document.getElementById('claimSubmitBtn');
+            btn.disabled = true;
+            btn.textContent = 'Registering...';
+
+            goToStep(2);
+
+            try {
+                const response = await fetch('/api/agents/' + currentSkillId + '/claim', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    const agentName = data.agentName || 'My Agent';
+                    const verCode = data.verificationCode || '';
+                    document.getElementById('tweetTemplate').textContent =
+                        'I\'m claiming my AI agent "' + agentName + '" on @moltbook\nVerification: ' + verCode;
+
+                    if (data.claimUrl) {
+                        document.getElementById('claimUrlLink').href = data.claimUrl;
+                    }
+
+                    goToStep(3);
+                } else {
+                    var errMsg = document.getElementById('claimErrorMsg');
+                    errMsg.textContent = data.error || 'Registration failed. Please try again.';
+                    errMsg.style.display = 'block';
+                    document.getElementById('claimRetryBtn').style.display = 'inline-block';
+                    btn.disabled = false;
+                    btn.textContent = '🦞 Register My Agent on Moltbook';
+                }
+            } catch (error) {
+                var errMsg = document.getElementById('claimErrorMsg');
+                errMsg.textContent = 'Connection error: ' + error.message;
+                errMsg.style.display = 'block';
+                document.getElementById('claimRetryBtn').style.display = 'inline-block';
+                btn.disabled = false;
+                btn.textContent = '🦞 Register My Agent on Moltbook';
+            }
+        }
+
+        async function checkClaimStatus(skillId) {
+            const btn = document.getElementById('checkClaimBtn');
+            btn.disabled = true;
+            btn.textContent = 'Checking...';
+
+            try {
+                const response = await fetch(`/api/agents/${skillId}/confirm-claim`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                const data = await response.json();
+
+                if (data.success && data.status === 'claimed') {
+                    alert('Agent claimed successfully! Reloading page...');
+                    window.location.reload();
+                } else {
+                    alert('Claim not yet confirmed. Make sure you tweeted the verification code and completed the claim on Moltbook.');
+                    btn.disabled = false;
+                    btn.textContent = "I've completed claim ✓";
+                }
+            } catch (error) {
+                alert('Error checking status: ' + error.message);
+                btn.disabled = false;
+                btn.textContent = "I've completed claim ✓";
+            }
+        }
+
+        async function register8004(tokenId) {
+            const btn = document.getElementById('register8004Btn');
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Registering...';
+            
+            try {
+                const response = await fetch(`/api/agents/${tokenId}/register-8004`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    if (data.already_registered) {
+                        alert('This agent is already registered on ERC-8004!');
+                    } else {
+                        btn.innerHTML = '✅ Metadata Prepared';
+                        btn.style.background = 'linear-gradient(135deg, #00ff88, #00cc6a)';
+                        btn.style.color = '#0a0a0f';
+                        setTimeout(() => window.location.reload(), 1500);
+                    }
+                } else {
+                    alert('Error: ' + (data.error || 'Registration failed'));
+                    btn.disabled = false;
+                    btn.innerHTML = '🛡️ Register on ERC-8004';
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+                btn.disabled = false;
+                btn.innerHTML = '🛡️ Register on ERC-8004';
+            }
+        }
+
+        // Close modal on backdrop click
+        document.addEventListener('click', function(e) {
+            const modal = document.getElementById('claimModal');
+            if (e.target === modal) {
+                closeClaimModal();
+            }
+        });
     </script>
 </body>
 </html>
