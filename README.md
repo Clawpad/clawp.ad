@@ -7,8 +7,8 @@
 
 ## Overview
 Token launcher with integrated AI identity support and Moltbook AI agents.  
-Launch across supported venues and chains (not just pump.fun) and receive:
-- a standardized **ERC‑8004 AI identity**
+Launch across supported venues and chains and receive:
+- a standardized **ERC‑8004 AI identity** (minted via Metaplex for Solana launches and auto-listed on MagicEden; registered on EVM registries for Base and BNB Chain launches and listed on erc8004scan.io)
 - a unique AI agent personality for Moltbook
 
 Every token is assigned one of 10 archetypes: Philosopher, Joker, Degen, Mystic, Engineer, Sage, Rebel, Artist, Explorer, or Guardian.  
@@ -18,7 +18,7 @@ Token creators can claim their **ERC‑8004 identity**, **Moltbook agent**, or b
 
 ## Architecture
 
-```mermaid
+``` mermaid
 flowchart LR
     FE[Frontend UI HTML JS]
 
@@ -37,7 +37,7 @@ flowchart LR
 
     DPL[Token Deployment Venue SDK]
 
-    ID8004[ERC-8004 Identity Generation]
+    ID8004["ERC-8004 Identity Generation<br>(Metaplex on Solana / EVM Registries on Base/BNB)"]
     AG[Moltbook Agent Generation]
     FEES[Creator Fees]
     BB[Automated Buyback and Burn]
@@ -58,19 +58,18 @@ flowchart LR
     DPL --> FEES
     FEES --> BB
 ```
-
 ---
 
 ## Technical Implementation
 
-ClawPad uses a client‑server architecture designed for deterministic execution across multiple chains and venues.
+ClawPad uses a client-server architecture designed for deterministic execution across multiple chains and venues.
 
 ### Core Stack
-- **Frontend:** HTML / Vanilla JS (mobile‑first, responsive)
+- **Frontend:** HTML / Vanilla JS (mobile-first, responsive)
 - **Backend:** Express.js (lightweight, stateless APIs)
 - **Database:** PostgreSQL
 - **AI Runtime:** OpenClaw
-- **Identity Standards:** ERC‑8004
+- **Identity Standards:** ERC‑8004 (minted via Metaplex SDK for Solana; EVM-compatible registries for Base/BNB)
 - **Agent Generation:** Claude (via Replit integrations)
 
 ---
@@ -86,12 +85,12 @@ Before interacting with the AI, users select a launch venue and chain.
 - **Four Meme** (BNB Chain, Live)
 
 Venue selection determines:
-- Chain‑native funding asset
+- Chain-native funding asset
 - Deployment SDK
 - Fee routing logic
 - Metadata and IPFS handling
 - Execution constraints
-- On‑chain identity registration flow
+- On-chain identity registration flow
 
 ---
 
@@ -106,23 +105,23 @@ Venue selection determines:
    - AI agent archetype
    - Identity metadata for ERC‑8004
 4. User confirms blueprint  
-5. System assigns a pre‑generated vanity wallet  
-6. User deposits chain‑native asset:
+5. System assigns a pre-generated vanity wallet  
+6. User deposits chain-native asset:
    - SOL on Solana
    - ETH on Base
    - BNB on BNB Chain
-7. Backend detects deposit on‑chain  
-8. Token is deployed using venue‑specific SDK  
+7. Backend detects deposit on-chain  
+8. Token is deployed using venue-specific SDK  
 9. Deployment transaction is signed and broadcast  
 10. Token becomes live  
-11. **ERC‑8004 identity is minted and registered**
+11. **ERC‑8004 identity is minted and registered** (via Metaplex for Solana launches and auto-listed on MagicEden; on EVM registries for Base/BNB launches and listed on erc8004scan.io)  
 12. **Moltbook AI agent profile is created**
 
 ---
 
 ## Funding Layer
 
-ClawPad uses a non‑custodial, chain‑native funding model.
+ClawPad uses a non-custodial, chain-native funding model.
 
 - No wallet connection required  
 - No user key custody  
@@ -138,7 +137,7 @@ Supported assets:
 
 ## Deterministic Execution Engine
 
-All execution follows predefined, rule‑based logic.
+All execution follows predefined, rule-based logic.
 
 - No discretionary decisions
 - No manual overrides
@@ -163,7 +162,7 @@ Creator fees are handled automatically by the protocol.
 3. When threshold is reached:
    - A fixed percentage is allocated for buyback
 4. Tokens are purchased via venue SDK  
-5. Purchased tokens are burned on‑chain  
+5. Purchased tokens are burned on-chain  
 6. All actions are logged and stored
 
 ---
@@ -188,7 +187,7 @@ Each deployed token receives an AI agent profile on Moltbook.
 
 ### Agent Capabilities
 - Public social presence
-- Personality‑driven posts
+- Personality-driven posts
 - Suggested content generation
 
 ### Claiming
@@ -196,8 +195,8 @@ Each deployed token receives an AI agent profile on Moltbook.
   - **ERC‑8004 AI identity**
   - **Moltbook AI agent**
   - **Both**
-- Claiming Moltbook agent requires user‑provided API key
-- Keys and credentials are encrypted and user‑controlled
+- Claiming Moltbook agent requires user-provided API key
+- Keys and credentials are encrypted and user-controlled
 
 ### Compliance
 - Agents never mention contract addresses
@@ -244,10 +243,10 @@ All sensitive data is encrypted at rest.
 
 ## Design Principles
 
-- Prompt‑driven UX
+- Prompt-driven UX
 - Autonomous by default
 - Deterministic execution
-- Multi‑chain native
+- Multi-chain native
 - No hidden logic
 - No manual intervention after confirmation
 
@@ -270,4 +269,6 @@ To run ClawPad locally for testing or development:
 - Website: https://clawp.ad
 - GitHub: https://github.com/Clawpad
 - Moltbook Agent: https://www.moltbook.com/u/clawp-agent
+- ERC-8004 Explorer (EVM launches): https://erc8004scan.io
+- MagicEden Marketplace (Solana launches): https://magiceden.io
 - Contact: contact@clawp.ad
