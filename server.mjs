@@ -13,6 +13,7 @@ import vanityPool from './src/vanity-pool.mjs';
 import { startBagsFeeClaimer } from './src/bags-fee-claimer.mjs';
 import { startPumpfunFeeClaimer } from './src/pumpfun-fee-claimer.mjs';
 import { startClankerFeeClaimer } from './src/clanker-fee-claimer.mjs';
+import { startFourMemeFeeClaimer } from './src/fourmeme-fee-claimer.mjs';
 import * as bagsSDK from './src/bags-sdk.mjs';
 import * as clankerSDK from './src/clanker.mjs';
 import * as baseWallet from './src/base-wallet.mjs';
@@ -20,7 +21,8 @@ import * as bnbWallet from './src/bnb-wallet.mjs';
 import * as fourmemeSDK from './src/fourmeme.mjs';
 import fs from 'node:fs';
 import erc8004 from './src/erc8004.mjs';
-import { startAutoPostScheduler, testPostForAgent } from './src/moltbook-autoposter.mjs';
+import * as solanaIdentity from './src/solana-identity.mjs';
+import { startAutoPostScheduler, testPostForAgent, triggerFirstPost } from './src/moltbook-autoposter.mjs';
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -32,8 +34,12 @@ const anthropic = new Anthropic({
   baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
 });
 
-// Load CLAWP system prompt
-const CLAWP_SYSTEM_PROMPT = fs.readFileSync('./skills/clawp/prompt.txt', 'utf-8');
+let CLAWP_SYSTEM_PROMPT = 'You are CLAWP, a helpful AI assistant for launching tokens.';
+try {
+  CLAWP_SYSTEM_PROMPT = fs.readFileSync('./skills/clawp/prompt.txt', 'utf-8');
+} catch (e) {
+  console.warn('[WARN] Could not load skills/clawp/prompt.txt, using fallback prompt:', e.message);
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 5000;
@@ -53,7 +59,7 @@ function getRequiredDeposit(venue) {
   if (venue === 'bags.fm') return 0.06;
   if (venue === 'clanker') return 0.001;
   if (venue === 'four.meme') return 0.005;
-  return 0.025;
+  return 0.035;
 }
 
 function getChainForVenue(venue) {
@@ -205,11 +211,17 @@ app.use(express.static(path.join(__dirname, 'public'), {
   }
 }));
 
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: Date.now() });
+});
+
 app.post('/api/session/create', async (req, res) => {
   try {
-    const { venue = 'pump.fun' } = req.body || {};
+    const { venue = 'pump.fun', creatorWallet = '' } = req.body || {};
     const validVenues = ['pump.fun', 'bags.fm', 'clanker', 'four.meme'];
     const selectedVenue = validVenues.includes(venue) ? venue : 'pump.fun';
+    
+    const sanitizedCreatorWallet = (creatorWallet || '').trim().substring(0, 255);
     
     let wallet, encryptedPrivKey;
     
@@ -224,7 +236,7 @@ app.post('/api/session/create', async (req, res) => {
       encryptedPrivKey = encrypt(wallet.secretKey);
     }
     
-    const session = await db.createSession(null, wallet.publicKey, encryptedPrivKey, selectedVenue);
+    const session = await db.createSession(null, wallet.publicKey, encryptedPrivKey, selectedVenue, sanitizedCreatorWallet);
     
     res.json({
       success: true,
@@ -621,7 +633,8 @@ app.post('/api/session/:id/deploy', async (req, res) => {
           status: 'active',
           websiteUrl: blueprint.website || null,
           twitterUrl: blueprint.twitter || null,
-          venue: 'clanker'
+          venue: 'clanker',
+          creatorWallet: session.creator_wallet || null
         });
         
         const narrative = blueprint.narrative || '';
@@ -640,6 +653,43 @@ app.post('/api/session/:id/deploy', async (req, res) => {
           console.log(`[Deploy/Clanker] Agent personality created: ${agentSkill.archetype}`);
         } catch (agentError) {
           console.error('[Deploy/Clanker] Agent skill generation failed (non-critical):', agentError.message);
+        }
+        
+        let erc8004Identity = null;
+        if (agentSkill) {
+          try {
+            console.log(`[Deploy/Clanker] Auto-registering ERC-8004 identity on Base using session wallet...`);
+            const metadata = erc8004.buildAgentMetadata(token, agentSkill, { registryChain: 'base' });
+            const metadataJson = JSON.stringify(metadata);
+            const metadataBase64 = Buffer.from(metadataJson).toString('base64');
+            const metadataUri = `data:application/json;base64,${metadataBase64}`;
+            
+            const identity = await db.createAgentIdentity(token.id, {
+              agentSkillId: agentSkill.id,
+              registryChain: 'base',
+              registryAddress: erc8004.getRegistryAddress()
+            });
+            
+            const metadataCid = `onchain-${identity.id}-${Date.now()}`;
+            await db.updateAgentIdentityMetadata(identity.id, metadataUri, metadataCid);
+            
+            const result = await erc8004.registerAgentOnChain(metadataUri, null, walletPrivKey, 'base');
+            
+            await db.updateAgentIdentityRegistered(
+              identity.id, result.agentNftId, result.txHash, result.registrarWallet, result.scanUrl
+            );
+            
+            erc8004Identity = {
+              agentNftId: result.agentNftId,
+              scanUrl: result.scanUrl,
+              explorerUrl: result.explorerUrl,
+              txHash: result.txHash,
+              registryChain: 'base'
+            };
+            console.log(`[Deploy/Clanker] ERC-8004 registered on Base! Agent #${result.agentNftId}, TX: ${result.txHash}`);
+          } catch (identityError) {
+            console.error('[Deploy/Clanker] ERC-8004 auto-registration failed (non-critical):', identityError.message);
+          }
         }
         
         return res.json({
@@ -662,6 +712,7 @@ app.post('/api/session/:id/deploy', async (req, res) => {
             voice: agentSkill.voice,
             status: agentSkill.status
           } : null,
+          erc8004Identity,
           transactionSignature: deployResult.txHash
         });
       } catch (clankerError) {
@@ -719,8 +770,17 @@ app.post('/api/session/:id/deploy', async (req, res) => {
           imageUrl,
           privateKey: walletPrivKey,
           label: 'Meme',
-          webUrl: blueprint.website || '',
-          twitterUrl: blueprint.twitter || ''
+          webUrl: blueprint.website || 'https://openclaw.ai',
+          twitterUrl: blueprint.twitter || '',
+          taxConfig: {
+            feeRate: 1,
+            recipientAddress: session.deposit_address,
+            recipientRate: 100,
+            burnRate: 0,
+            divideRate: 0,
+            liquidityRate: 0,
+            minSharing: 100000
+          }
         });
         
         console.log(`[Deploy/FourMeme] Deploy tx: ${deployResult.txHash}`);
@@ -730,19 +790,22 @@ app.post('/api/session/:id/deploy', async (req, res) => {
           throw new Error('Four.meme deploy succeeded but no token address returned');
         }
         
+        const finalImageUrl = deployResult.imageUrl || imageUrl || '';
+        
         const token = await db.createToken({
           mintAddress: deployResult.contractAddress,
           name: blueprint.name,
           symbol: blueprint.symbol,
           description: blueprint.description || '',
-          imageUrl: imageUrl || '',
+          imageUrl: finalImageUrl,
           metadataUri: '',
           walletPublicKey: deployResult.deployerAddress || session.deposit_address,
           walletPrivateKeyEncrypted: session.wallet_private_key_encrypted || '',
           status: 'active',
           websiteUrl: blueprint.website || null,
           twitterUrl: blueprint.twitter || null,
-          venue: 'four.meme'
+          venue: 'four.meme',
+          creatorWallet: session.creator_wallet || null
         });
         
         const narrative = blueprint.narrative || '';
@@ -761,6 +824,43 @@ app.post('/api/session/:id/deploy', async (req, res) => {
           console.log(`[Deploy/FourMeme] Agent personality created: ${agentSkill.archetype}`);
         } catch (agentError) {
           console.error('[Deploy/FourMeme] Agent skill generation failed (non-critical):', agentError.message);
+        }
+        
+        let erc8004Identity = null;
+        if (agentSkill) {
+          try {
+            console.log(`[Deploy/FourMeme] Auto-registering ERC-8004 identity on BNB Chain using session wallet...`);
+            const metadata = erc8004.buildAgentMetadata(token, agentSkill, { registryChain: 'bnb' });
+            const metadataJson = JSON.stringify(metadata);
+            const metadataBase64 = Buffer.from(metadataJson).toString('base64');
+            const metadataUri = `data:application/json;base64,${metadataBase64}`;
+            
+            const identity = await db.createAgentIdentity(token.id, {
+              agentSkillId: agentSkill.id,
+              registryChain: 'bnb',
+              registryAddress: erc8004.getRegistryAddress()
+            });
+            
+            const metadataCid = `onchain-${identity.id}-${Date.now()}`;
+            await db.updateAgentIdentityMetadata(identity.id, metadataUri, metadataCid);
+            
+            const result = await erc8004.registerAgentOnChain(metadataUri, null, walletPrivKey, 'bnb');
+            
+            await db.updateAgentIdentityRegistered(
+              identity.id, result.agentNftId, result.txHash, result.registrarWallet, result.scanUrl
+            );
+            
+            erc8004Identity = {
+              agentNftId: result.agentNftId,
+              scanUrl: result.scanUrl,
+              explorerUrl: result.explorerUrl,
+              txHash: result.txHash,
+              registryChain: 'bnb'
+            };
+            console.log(`[Deploy/FourMeme] ERC-8004 registered on BNB Chain! Agent #${result.agentNftId}, TX: ${result.txHash}`);
+          } catch (identityError) {
+            console.error('[Deploy/FourMeme] ERC-8004 auto-registration failed (non-critical):', identityError.message);
+          }
         }
         
         return res.json({
@@ -783,6 +883,7 @@ app.post('/api/session/:id/deploy', async (req, res) => {
             voice: agentSkill.voice,
             status: agentSkill.status
           } : null,
+          erc8004Identity,
           transactionSignature: deployResult.txHash
         });
       } catch (fourMemeError) {
@@ -942,7 +1043,8 @@ app.post('/api/session/:id/deploy', async (req, res) => {
         status: 'active',
         websiteUrl: blueprint.website || null,
         twitterUrl: blueprint.twitter || null,
-        venue: venue
+        venue: venue,
+        creatorWallet: session.creator_wallet || null
       });
       
       const narrative = blueprint.narrative || '';
@@ -961,7 +1063,6 @@ app.post('/api/session/:id/deploy', async (req, res) => {
       
       vanityPool.triggerGeneration();
       
-      // Generate AI agent personality for this token (non-blocking)
       let agentSkill = null;
       try {
         console.log(`[Deploy] Generating agent personality for ${token.symbol}...`);
@@ -970,6 +1071,41 @@ app.post('/api/session/:id/deploy', async (req, res) => {
         console.log(`[Deploy] Agent personality created: ${agentSkill.archetype}`);
       } catch (agentError) {
         console.error('[Deploy] Agent skill generation failed (non-critical):', agentError.message);
+      }
+      
+      let solIdentityResult = null;
+      const collectionMint = process.env.SOLANA_IDENTITY_COLLECTION_MINT;
+      if (agentSkill && collectionMint) {
+        try {
+          console.log(`[Deploy] Minting Solana AI Identity NFT for ${token.symbol}...`);
+          const identityResult = await solanaIdentity.mintIdentityNFT(
+            signerSecretKey,
+            collectionMint,
+            token,
+            agentSkill,
+            { imageUri: token.image_url || blueprint.ipfsImageUrl || '' }
+          );
+          
+          await db.createSolanaIdentity({
+            token_id: token.id,
+            agent_skill_id: agentSkill.id,
+            identity_nft_mint: identityResult.identityNftMint,
+            token_mint: token.mint_address,
+            creator_wallet: token.wallet_public_key,
+            deployment_platform: venue,
+            metadata_uri: identityResult.metadataUri,
+            verification_hash: identityResult.verificationHash,
+            collection_mint: collectionMint,
+            status: 'minted',
+            tx_hash: identityResult.txSignature,
+            scan_url: identityResult.solscanUrl
+          });
+          
+          solIdentityResult = identityResult;
+          console.log(`[Deploy] Solana identity minted: ${identityResult.identityNftMint}`);
+        } catch (identityError) {
+          console.error('[Deploy] Solana identity mint failed (non-critical):', identityError.message);
+        }
       }
       
       const venueUrl = venue === 'bags.fm' 
@@ -996,6 +1132,12 @@ app.post('/api/session/:id/deploy', async (req, res) => {
           archetype: agentSkill.archetype,
           voice: agentSkill.voice,
           status: agentSkill.status
+        } : null,
+        solanaIdentity: solIdentityResult ? {
+          nftMint: solIdentityResult.identityNftMint,
+          solscanUrl: solIdentityResult.solscanUrl,
+          magicEdenUrl: solIdentityResult.magicEdenUrl,
+          verificationHash: solIdentityResult.verificationHash
         } : null,
         transactionSignature: signature
       });
@@ -1056,14 +1198,6 @@ app.post('/api/session/:id/refund', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Session not found' });
     }
     
-    let { destinationWallet } = req.body;
-    if (!destinationWallet) {
-      destinationWallet = session.funding_wallet;
-    }
-    if (!destinationWallet || !solana.isValidSolanaAddress(destinationWallet)) {
-      return res.status(400).json({ success: false, error: 'No funding wallet found. Please provide destinationWallet.' });
-    }
-    
     if (session.status === 'completed') {
       return res.status(400).json({ success: false, error: 'Cannot refund completed session' });
     }
@@ -1072,9 +1206,64 @@ app.post('/api/session/:id/refund', async (req, res) => {
       return res.status(400).json({ success: false, error: 'No wallet associated with this session' });
     }
     
+    const { destinationWallet } = req.body;
+    const venue = session.venue || 'pump.fun';
+    const secretKey = decrypt(session.wallet_private_key_encrypted);
+    
+    if (venue === 'clanker') {
+      const ethDest = destinationWallet || session.funding_wallet;
+      if (!ethDest || !baseWallet.isValidAddress(ethDest)) {
+        return res.status(400).json({ success: false, error: 'Please provide a valid Base/ETH wallet address (destinationWallet).' });
+      }
+      const balance = await baseWallet.getBalance(session.deposit_address);
+      if (balance <= 0) {
+        return res.status(400).json({ success: false, error: 'No ETH to refund', balance: 0 });
+      }
+      const result = await baseWallet.transferAllETH(secretKey, ethDest);
+      await db.updateSessionStatus(session.id, 'refunded');
+      console.log(`[Refund] Session ${session.id}: ${result.amount} ETH sent to ${ethDest} on Base, tx: ${result.txHash}`);
+      return res.json({
+        success: true,
+        refundedAmount: result.amount,
+        currency: 'ETH',
+        chain: 'base',
+        destinationWallet: ethDest,
+        txHash: result.txHash,
+        explorerUrl: `https://basescan.org/tx/${result.txHash}`
+      });
+    }
+    
+    if (venue === 'four.meme') {
+      const bnbDest = destinationWallet || session.funding_wallet;
+      if (!bnbDest || !bnbWallet.isValidAddress(bnbDest)) {
+        return res.status(400).json({ success: false, error: 'Please provide a valid BNB Chain wallet address (destinationWallet).' });
+      }
+      const balance = await bnbWallet.getBalance(session.deposit_address);
+      if (balance <= 0) {
+        return res.status(400).json({ success: false, error: 'No BNB to refund', balance: 0 });
+      }
+      const result = await bnbWallet.transferAllBNB(secretKey, bnbDest);
+      await db.updateSessionStatus(session.id, 'refunded');
+      console.log(`[Refund] Session ${session.id}: ${result.amount} BNB sent to ${bnbDest} on BSC, tx: ${result.txHash}`);
+      return res.json({
+        success: true,
+        refundedAmount: result.amount,
+        currency: 'BNB',
+        chain: 'bnb',
+        destinationWallet: bnbDest,
+        txHash: result.txHash,
+        explorerUrl: `https://bscscan.com/tx/${result.txHash}`
+      });
+    }
+    
+    let refundDest = destinationWallet || session.funding_wallet;
+    if (!refundDest || !solana.isValidSolanaAddress(refundDest)) {
+      return res.status(400).json({ success: false, error: 'Please provide a valid Solana wallet address (destinationWallet).' });
+    }
+    
     const balance = await solana.getBalance(session.deposit_address);
     if (balance <= 0) {
-      return res.status(400).json({ success: false, error: 'No funds to refund', balance: 0 });
+      return res.status(400).json({ success: false, error: 'No SOL to refund', balance: 0 });
     }
     
     const txFee = 0.000005;
@@ -1084,21 +1273,21 @@ app.post('/api/session/:id/refund', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Balance too low to cover transaction fee', balance });
     }
     
-    const secretKey = decrypt(session.wallet_private_key_encrypted);
     const keypair = solana.keypairFromSecretKey(secretKey);
-    
-    const signature = await solana.transferSOL(keypair, destinationWallet, refundAmount);
+    const signature = await solana.transferSOL(keypair, refundDest, refundAmount);
     
     await db.updateSessionStatus(session.id, 'refunded');
     
-    console.log(`[Refund] Session ${session.id}: ${refundAmount} SOL sent to ${destinationWallet}, tx: ${signature}`);
+    console.log(`[Refund] Session ${session.id}: ${refundAmount} SOL sent to ${refundDest}, tx: ${signature}`);
     
     res.json({
       success: true,
       refundedAmount: refundAmount,
-      destinationWallet,
-      transactionSignature: signature,
-      solscanUrl: `https://solscan.io/tx/${signature}`
+      currency: 'SOL',
+      chain: 'solana',
+      destinationWallet: refundDest,
+      txHash: signature,
+      explorerUrl: `https://solscan.io/tx/${signature}`
     });
     
   } catch (error) {
@@ -1323,6 +1512,62 @@ app.get('/api/burns', async (req, res) => {
     });
   } catch (error) {
     console.error('Error getting burns:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/fee-distributions', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 20;
+    const distributions = await db.getRecentFeeDistributions(limit);
+    const stats = await db.getFeeDistributionStats();
+    
+    res.json({
+      success: true,
+      stats: {
+        totalFeesClaimed: parseFloat(stats.total_fees_claimed) || 0,
+        totalCreatorPaid: parseFloat(stats.total_creator_paid) || 0,
+        totalBuybackSpent: parseFloat(stats.total_buyback_spent) || 0,
+        totalTreasuryCollected: parseFloat(stats.total_treasury_collected) || 0,
+        totalTokensBurned: parseFloat(stats.total_tokens_burned) || 0,
+        totalDistributions: parseInt(stats.total_distributions) || 0
+      },
+      distributions: distributions.map(d => ({
+        id: d.id,
+        tokenName: d.token_name,
+        tokenSymbol: d.symbol,
+        creatorWallet: d.creator_wallet,
+        totalClaimed: parseFloat(d.total_claimed),
+        creatorAmount: parseFloat(d.creator_amount),
+        buybackAmount: parseFloat(d.buyback_amount),
+        treasuryAmount: parseFloat(d.treasury_amount),
+        gasReserveAmount: parseFloat(d.gas_reserve_amount),
+        tokensBurned: parseFloat(d.tokens_burned),
+        chain: d.chain,
+        status: d.status,
+        creatorTxHash: d.creator_tx_hash,
+        treasuryTxHash: d.treasury_tx_hash,
+        buybackTxHash: d.buyback_tx_hash,
+        burnTxHash: d.burn_tx_hash,
+        createdAt: d.created_at
+      }))
+    });
+  } catch (error) {
+    console.error('Error getting fee distributions:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/fee-distributions/:tokenId', async (req, res) => {
+  try {
+    const tokenId = parseInt(req.params.tokenId);
+    if (isNaN(tokenId)) {
+      return res.status(400).json({ success: false, error: 'Invalid token ID' });
+    }
+    const distributions = await db.getFeeDistributionsByToken(tokenId);
+    res.json({ success: true, distributions });
+  } catch (error) {
+    console.error('Error getting token fee distributions:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -1841,30 +2086,39 @@ app.get('/:slug', async (req, res) => {
     }
     
     let identity8004Section = '';
+    const venue = token.venue || 'pump.fun';
+    const isSolanaVenue = (venue === 'pump.fun' || venue === 'bags.fm');
+    const isEvmVenue = (venue === 'clanker' || venue === 'four.meme');
     try {
+      if (isEvmVenue) {
       const agentSkillForIdentity = await db.getAgentSkillByTokenId(token.id);
       if (agentSkillForIdentity) {
         const identity = await db.getAgentIdentityByTokenId(token.id);
         
+        const identityChain = identity ? (identity.registry_chain || 'base') : (venue === 'four.meme' ? 'bnb' : 'base');
+        const chainLabel = identityChain === 'bnb' ? 'BNB Chain' : 'Base';
+        const explorerName = identityChain === 'bnb' ? 'BscScan' : 'BaseScan';
+
         if (identity && identity.status === 'registered') {
-          const scanLink = identity.scan_url || erc8004.getScanUrl(identity.agent_nft_id);
-          const explorerLink = identity.tx_hash ? erc8004.getExplorerTxUrl(identity.tx_hash) : null;
+          const scanLink = identity.scan_url || erc8004.getScanUrl(identity.agent_nft_id, identityChain);
+          const explorerLink = identity.tx_hash ? erc8004.getExplorerTxUrl(identity.tx_hash, identityChain) : null;
           identity8004Section = `
             <section style="margin: 24px 0; padding: 24px; background: linear-gradient(135deg, rgba(0, 82, 255, 0.08), rgba(0, 82, 255, 0.03)); border-radius: 20px; border: 1px solid rgba(0, 82, 255, 0.2);">
               <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px;">
                 <span style="font-size: 1.3rem;">🛡️</span>
                 <h4 style="font-family: 'Space Grotesk', sans-serif; font-size: 1.1rem; margin: 0;">ERC-8004 Verified Agent</h4>
                 <span style="background: rgba(0, 255, 136, 0.15); color: #00ff88; padding: 3px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 600;">Verified</span>
-                <span style="background: rgba(0, 82, 255, 0.2); color: #5b9bff; padding: 3px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 600;">Base</span>
+                <span style="background: rgba(0, 82, 255, 0.2); color: #5b9bff; padding: 3px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 600;">${chainLabel}</span>
               </div>
               <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 16px; line-height: 1.5;">
-                This agent is registered on the ERC-8004 Identity Registry on Base, providing on-chain verified identity and trust for AI agents.
+                This agent is registered on the ERC-8004 Identity Registry on ${chainLabel}, providing on-chain verified identity and trust for AI agents.
               </p>
               <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
                 ${identity.agent_nft_id ? `<span style="font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; color: var(--text-secondary); background: var(--bg-primary); padding: 6px 12px; border-radius: 8px;">Agent #${escapeHtml(identity.agent_nft_id)}</span>` : ''}
                 ${scanLink ? `<a href="${escapeHtml(scanLink)}" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; padding: 10px 20px; background: rgba(0, 82, 255, 0.15); color: #5b9bff; border-radius: 10px; text-decoration: none; font-size: 0.85rem; font-weight: 600; border: 1px solid rgba(0, 82, 255, 0.25); transition: all 0.2s;">🔍 View on 8004scan</a>` : ''}
-                ${explorerLink ? `<a href="${escapeHtml(explorerLink)}" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; padding: 10px 16px; background: var(--bg-primary); color: var(--text-secondary); border-radius: 10px; text-decoration: none; font-size: 0.85rem; border: 1px solid var(--border-color);">BaseScan ↗</a>` : ''}
+                ${explorerLink ? `<a href="${escapeHtml(explorerLink)}" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; padding: 10px 16px; background: var(--bg-primary); color: var(--text-secondary); border-radius: 10px; text-decoration: none; font-size: 0.85rem; border: 1px solid var(--border-color);">${explorerName} ↗</a>` : ''}
               </div>
+              <p style="color: var(--text-tertiary, #666); font-size: 0.78rem; margin-top: 12px; font-style: italic;">⏳ 8004scan indexing takes 5–10 minutes. Check back periodically if not visible yet.</p>
             </section>
           `;
         } else if (identity && (identity.status === 'pending' || identity.status === 'metadata_ready')) {
@@ -1874,10 +2128,10 @@ app.get('/:slug', async (req, res) => {
                 <span style="font-size: 1.3rem;">🛡️</span>
                 <h4 style="font-family: 'Space Grotesk', sans-serif; font-size: 1.1rem; margin: 0;">ERC-8004 On-Chain Identity</h4>
                 <span style="background: rgba(255, 170, 0, 0.15); color: #ffaa00; padding: 3px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 600;">Pending</span>
-                <span style="background: rgba(0, 82, 255, 0.2); color: #5b9bff; padding: 3px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 600;">Base</span>
+                <span style="background: rgba(0, 82, 255, 0.2); color: #5b9bff; padding: 3px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 600;">${chainLabel}</span>
               </div>
               <p style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.5;">
-                Registration in progress. Your agent's metadata has been prepared and is awaiting on-chain registration on Base.
+                Registration in progress. Your agent's metadata has been prepared and is awaiting on-chain registration on ${chainLabel}.
               </p>
             </section>
           `;
@@ -1888,7 +2142,7 @@ app.get('/:slug', async (req, res) => {
                 <span style="font-size: 1.3rem;">🛡️</span>
                 <h4 style="font-family: 'Space Grotesk', sans-serif; font-size: 1.1rem; margin: 0;">ERC-8004 On-Chain Identity</h4>
                 <span style="background: rgba(255, 68, 68, 0.15); color: #ff4444; padding: 3px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 600;">Failed</span>
-                <span style="background: rgba(0, 82, 255, 0.2); color: #5b9bff; padding: 3px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 600;">Base</span>
+                <span style="background: rgba(0, 82, 255, 0.2); color: #5b9bff; padding: 3px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 600;">${chainLabel}</span>
               </div>
               <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 16px; line-height: 1.5;">
                 Previous registration attempt failed. You can retry the on-chain registration.
@@ -1904,10 +2158,10 @@ app.get('/:slug', async (req, res) => {
               <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px;">
                 <span style="font-size: 1.3rem;">🛡️</span>
                 <h4 style="font-family: 'Space Grotesk', sans-serif; font-size: 1.1rem; margin: 0;">ERC-8004 On-Chain Identity</h4>
-                <span style="background: rgba(0, 82, 255, 0.2); color: #5b9bff; padding: 3px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 600;">Base</span>
+                <span style="background: rgba(0, 82, 255, 0.2); color: #5b9bff; padding: 3px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 600;">${chainLabel}</span>
               </div>
               <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 16px; line-height: 1.5;">
-                Register this agent on the <strong style="color: var(--text-primary);">ERC-8004 Identity Registry</strong> on Base for on-chain verified identity. Your agent will appear on <a href="https://www.8004scan.io" target="_blank" style="color: #5b9bff; text-decoration: none;">8004scan.io</a> and gain trust in the AI agent ecosystem.
+                ERC-8004 identity registration is automatic during deployment. If this token was deployed before auto-registration was enabled, you can register manually.
               </p>
               <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
                 <button onclick="register8004(${token.id})" id="register8004Btn" style="display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; background: linear-gradient(135deg, #0052FF, #3b82f6); color: white; border: none; border-radius: 12px; cursor: pointer; font-weight: 600; font-size: 0.9rem; transition: all 0.2s;">
@@ -1921,11 +2175,79 @@ app.get('/:slug', async (req, res) => {
           `;
         }
       }
+      }
     } catch (err8004) {
       console.error('Error fetching 8004 identity for token page:', err8004.message);
     }
 
-    const venue = token.venue || 'pump.fun';
+    let solanaIdentitySection = '';
+    
+    if (isSolanaVenue) {
+      try {
+        const solIdentity = await db.getSolanaIdentityByTokenId(token.id);
+        
+        if (solIdentity && solIdentity.status === 'minted') {
+          const solscanLink = solIdentity.scan_url || `https://solscan.io/token/${solIdentity.identity_nft_mint}`;
+          const magicEdenLink = `https://magiceden.io/item-details/${solIdentity.identity_nft_mint}`;
+          const explorerTxLink = solIdentity.tx_hash ? `https://solscan.io/tx/${solIdentity.tx_hash}` : null;
+          solanaIdentitySection = `
+            <section style="margin: 24px 0; padding: 24px; background: linear-gradient(135deg, rgba(153, 69, 255, 0.08), rgba(20, 241, 149, 0.05)); border-radius: 20px; border: 1px solid rgba(153, 69, 255, 0.25);">
+              <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap;">
+                <span style="font-size: 1.3rem;">🦀</span>
+                <h4 style="font-family: 'Space Grotesk', sans-serif; font-size: 1.1rem; margin: 0;">Solana Verified Identity</h4>
+                <span style="background: rgba(0, 255, 136, 0.15); color: #00ff88; padding: 3px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 600;">Verified</span>
+                <span style="background: rgba(153, 69, 255, 0.2); color: #b794f6; padding: 3px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 600;">Solana</span>
+                <span style="background: rgba(20, 241, 149, 0.15); color: #14f195; padding: 3px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 600;">Metaplex Core</span>
+              </div>
+              <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 16px; line-height: 1.5;">
+                This AI agent has a verified on-chain identity minted as a <strong style="color: var(--text-primary);">Metaplex Core NFT</strong> on Solana. Viewable in wallets, explorers, and Magic Eden.
+              </p>
+              ${solIdentity.verification_hash ? `<div style="margin-bottom: 16px; padding: 10px 14px; background: var(--bg-primary); border-radius: 10px; border: 1px solid var(--border-color);">
+                <span style="font-size: 0.75rem; color: var(--text-secondary); display: block; margin-bottom: 4px;">Verification Hash</span>
+                <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: #14f195; word-break: break-all;">${escapeHtml(solIdentity.verification_hash)}</span>
+              </div>` : ''}
+              <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
+                ${solIdentity.identity_nft_mint ? `<span style="font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: var(--text-secondary); background: var(--bg-primary); padding: 6px 12px; border-radius: 8px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(solIdentity.identity_nft_mint)}">${escapeHtml(solIdentity.identity_nft_mint.slice(0, 8))}...${escapeHtml(solIdentity.identity_nft_mint.slice(-4))}</span>` : ''}
+                <a href="${escapeHtml(solscanLink)}" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; padding: 10px 20px; background: rgba(153, 69, 255, 0.15); color: #b794f6; border-radius: 10px; text-decoration: none; font-size: 0.85rem; font-weight: 600; border: 1px solid rgba(153, 69, 255, 0.25); transition: all 0.2s;">🔍 View on Solscan</a>
+                <a href="${escapeHtml(magicEdenLink)}" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; padding: 10px 20px; background: rgba(228, 37, 117, 0.12); color: #e42575; border-radius: 10px; text-decoration: none; font-size: 0.85rem; font-weight: 600; border: 1px solid rgba(228, 37, 117, 0.2); transition: all 0.2s;">💎 Magic Eden</a>
+                ${explorerTxLink ? `<a href="${escapeHtml(explorerTxLink)}" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; padding: 10px 16px; background: var(--bg-primary); color: var(--text-secondary); border-radius: 10px; text-decoration: none; font-size: 0.85rem; border: 1px solid var(--border-color);">TX ↗</a>` : ''}
+              </div>
+            </section>
+          `;
+        } else if (solIdentity && solIdentity.status === 'pending') {
+          solanaIdentitySection = `
+            <section style="margin: 24px 0; padding: 24px; background: linear-gradient(135deg, rgba(153, 69, 255, 0.06), rgba(153, 69, 255, 0.02)); border-radius: 20px; border: 1px solid rgba(153, 69, 255, 0.15);">
+              <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px;">
+                <span style="font-size: 1.3rem;">🦀</span>
+                <h4 style="font-family: 'Space Grotesk', sans-serif; font-size: 1.1rem; margin: 0;">Solana AI Identity</h4>
+                <span style="background: rgba(255, 170, 0, 0.15); color: #ffaa00; padding: 3px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 600;">Minting...</span>
+                <span style="background: rgba(153, 69, 255, 0.2); color: #b794f6; padding: 3px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 600;">Solana</span>
+              </div>
+              <p style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.5;">
+                Identity NFT is being minted on Solana via Metaplex Core. This will be viewable on Solscan and Magic Eden shortly.
+              </p>
+            </section>
+          `;
+        } else if (solIdentity && solIdentity.status === 'failed') {
+          solanaIdentitySection = `
+            <section style="margin: 24px 0; padding: 24px; background: linear-gradient(135deg, rgba(255, 68, 68, 0.06), rgba(255, 68, 68, 0.02)); border-radius: 20px; border: 1px solid rgba(255, 68, 68, 0.15);">
+              <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 16px;">
+                <span style="font-size: 1.3rem;">🦀</span>
+                <h4 style="font-family: 'Space Grotesk', sans-serif; font-size: 1.1rem; margin: 0;">Solana AI Identity</h4>
+                <span style="background: rgba(255, 68, 68, 0.15); color: #ff4444; padding: 3px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 600;">Failed</span>
+                <span style="background: rgba(153, 69, 255, 0.2); color: #b794f6; padding: 3px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 600;">Solana</span>
+              </div>
+              <p style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.5;">
+                Identity NFT minting failed. The system will retry automatically.
+              </p>
+            </section>
+          `;
+        }
+      } catch (solIdErr) {
+        console.error('Error fetching Solana identity for token page:', solIdErr.message);
+      }
+    }
+
     const chainMap = {
       'pump.fun': { name: 'Solana', color: '#9945FF', bg: 'rgba(153, 69, 255, 0.15)' },
       'bags.fm': { name: 'Solana', color: '#9945FF', bg: 'rgba(153, 69, 255, 0.15)' },
@@ -1972,6 +2294,7 @@ app.get('/:slug', async (req, res) => {
       .replace(/\{\{NARRATIVE_SECTION\}\}/g, narrativeSection)
       .replace(/\{\{SOCIAL_LINKS\}\}/g, socialLinksHtml)
       .replace(/\{\{AGENT_SECTION\}\}/g, agentSection)
+      .replace(/\{\{SOLANA_IDENTITY_SECTION\}\}/g, solanaIdentitySection)
       .replace(/\{\{IDENTITY_8004_SECTION\}\}/g, identity8004Section)
       .replace(/\{\{BUY_BUTTON\}\}/g, buyButtonHtml)
       .replace(/\{\{CHART_BUTTON\}\}/g, chartButtonHtml)
@@ -2051,8 +2374,8 @@ app.get('/api/agents/:id/export-personality', async (req, res) => {
     }
 
     const token = await db.getToken(skill.token_id);
-    const rawName = token ? `${token.name}Agent` : `Agent${skillId}`;
-    const agentName = rawName.replace(/[^a-zA-Z0-9_-]/g, '_').replace(/_+/g, '_').substring(0, 32);
+    const tokenName = token ? (token.name || token.symbol || 'Unknown').trim() : `Agent${skillId}`;
+    const agentName = `${tokenName} Agent Clawp`.substring(0, 32);
 
     let topicsArray = [];
     let quirksArray = [];
@@ -2104,8 +2427,8 @@ app.post('/api/agents/:id/claim', async (req, res) => {
     }
 
     const token = await db.getToken(skill.token_id);
-    const rawName = token ? `${token.name}Agent` : `Agent${skillId}`;
-    const agentName = rawName.replace(/[^a-zA-Z0-9_-]/g, '_').replace(/_+/g, '_').substring(0, 32);
+    const tokenName = token ? (token.name || token.symbol || 'Unknown').trim() : `Agent${skillId}`;
+    const agentName = `${tokenName} Agent Clawp`.substring(0, 32);
     const agentDescription = skill.voice || `${skill.archetype} archetype AI agent`;
 
     console.log(`[Moltbook] Registering agent "${agentName}" via direct API...`);
@@ -2174,7 +2497,8 @@ app.post('/api/agents/:id/confirm-claim', async (req, res) => {
 
     if (statusData.status === 'claimed') {
       await db.confirmAgentSkillClaim(skillId);
-      console.log(`[Moltbook] Agent ${skillId} claim confirmed!`);
+      console.log(`[Moltbook] Agent ${skillId} claim confirmed! Triggering first post...`);
+      triggerFirstPost(skillId).catch(err => console.error(`[Moltbook] First post failed for agent ${skillId}:`, err.message));
       res.json({ success: true, status: 'claimed' });
     } else {
       res.json({ success: true, status: 'pending_claim', moltbookStatus: statusData.status });
@@ -2360,8 +2684,20 @@ app.post('/api/agents/:tokenId/register-8004', async (req, res) => {
       return res.status(400).json({ success: false, error: 'No agent skill found for this token. Deploy agent first.' });
     }
 
-    const chain = erc8004.getRegistryChain();
+    const venue = token.venue || 'pump.fun';
+    const chain = erc8004.getChainForVenue(venue) || 'base';
+    const chainLabel = chain === 'bnb' ? 'BNB Chain' : 'Base';
     const registryAddress = erc8004.getRegistryAddress();
+
+    const session = await db.getSessionByTokenId(tokenId);
+    if (!session || !session.wallet_private_key_encrypted) {
+      return res.status(400).json({ success: false, error: 'No session wallet found for this token. Cannot register without session wallet.' });
+    }
+
+    const walletPrivKey = decrypt(session.wallet_private_key_encrypted);
+    if (!walletPrivKey) {
+      return res.status(400).json({ success: false, error: 'Could not decrypt session wallet key.' });
+    }
 
     let existing = await db.getAgentIdentityByTokenId(tokenId);
 
@@ -2383,7 +2719,7 @@ app.post('/api/agents/:tokenId/register-8004', async (req, res) => {
       });
     }
 
-    const metadata = erc8004.buildAgentMetadata(token, agentSkill);
+    const metadata = erc8004.buildAgentMetadata(token, agentSkill, { registryChain: chain });
     const metadataJson = JSON.stringify(metadata);
     const metadataBase64 = Buffer.from(metadataJson).toString('base64');
     const metadataUri = `data:application/json;base64,${metadataBase64}`;
@@ -2396,7 +2732,7 @@ app.post('/api/agents/:tokenId/register-8004', async (req, res) => {
           id: existing.id,
           agentNftId: existing.agent_nft_id,
           chain: existing.registry_chain,
-          scanUrl: existing.scan_url || erc8004.getScanUrl(existing.agent_nft_id),
+          scanUrl: existing.scan_url || erc8004.getScanUrl(existing.agent_nft_id, chain),
           txHash: existing.tx_hash,
           status: existing.status
         }
@@ -2406,10 +2742,10 @@ app.post('/api/agents/:tokenId/register-8004', async (req, res) => {
     const metadataCid = `onchain-${identity.id}-${Date.now()}`;
     await db.updateAgentIdentityMetadata(identity.id, metadataUri, metadataCid);
 
-    console.log(`[ERC-8004] Starting on-chain ${existingAgentNftId ? 'update' : 'registration'} for token ${tokenId}...`);
+    console.log(`[ERC-8004] Starting on-chain ${existingAgentNftId ? 'update' : 'registration'} for token ${tokenId} on ${chainLabel}...`);
 
     try {
-      const result = await erc8004.registerAgentOnChain(metadataUri, existingAgentNftId);
+      const result = await erc8004.registerAgentOnChain(metadataUri, existingAgentNftId, walletPrivKey, chain);
 
       await db.updateAgentIdentityRegistered(
         identity.id,
@@ -2427,7 +2763,7 @@ app.post('/api/agents/:tokenId/register-8004', async (req, res) => {
         identity: {
           id: identity.id,
           chain: chain,
-          chainName: 'Base',
+          chainName: chainLabel,
           registryAddress: registryAddress,
           agentNftId: result.agentNftId,
           txHash: result.txHash,
@@ -2435,7 +2771,7 @@ app.post('/api/agents/:tokenId/register-8004', async (req, res) => {
           explorerUrl: result.explorerUrl,
           status: 'registered'
         },
-        message: `Agent #${result.agentNftId} registered on Base! View on 8004scan.io`
+        message: `Agent #${result.agentNftId} registered on ${chainLabel}! View on 8004scan.io`
       });
     } catch (onchainError) {
       console.error(`[ERC-8004] On-chain registration failed:`, onchainError.message);
@@ -2472,17 +2808,20 @@ app.get('/api/agents/:tokenId/identity-8004', async (req, res) => {
       metadata = erc8004.buildAgentMetadata(token, agentSkill);
     }
 
+    const idChain = identity.registry_chain || 'base';
+    const idChainLabel = idChain === 'bnb' ? 'BNB Chain' : 'Base';
+
     res.json({
       success: true,
       identity: {
         id: identity.id,
-        chain: identity.registry_chain,
-        chainName: 'Base',
+        chain: idChain,
+        chainName: idChainLabel,
         registryAddress: identity.registry_address,
         agentNftId: identity.agent_nft_id,
         metadataUri: identity.metadata_uri,
         txHash: identity.tx_hash,
-        explorerUrl: identity.tx_hash ? erc8004.getExplorerTxUrl(identity.tx_hash) : null,
+        explorerUrl: identity.tx_hash ? erc8004.getExplorerTxUrl(identity.tx_hash, idChain) : null,
         scanUrl: identity.scan_url,
         status: identity.status,
         registeredAt: identity.registered_at,
@@ -2554,6 +2893,116 @@ app.get('/api/agents/:tokenId/metadata-8004', async (req, res) => {
   }
 });
 
+// Solana AI Identity API endpoints
+app.get('/api/sol-identities', async (req, res) => {
+  try {
+    const { token_mint, creator, archetype } = req.query;
+    
+    if (token_mint) {
+      const identity = await db.getSolanaIdentityByMint(token_mint);
+      if (!identity) return res.status(404).json({ success: false, error: 'Identity not found' });
+      return res.json({ success: true, identity });
+    }
+    
+    const all = await db.getAllSolanaIdentities(50);
+    let filtered = all;
+    if (creator) filtered = filtered.filter(i => i.creator_wallet === creator);
+    if (archetype) filtered = filtered.filter(i => i.archetype?.toLowerCase() === archetype.toLowerCase());
+    
+    res.json({ success: true, identities: filtered, total: filtered.length });
+  } catch (error) {
+    console.error('Error fetching Solana identities:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/sol-identities/:tokenId', async (req, res) => {
+  try {
+    const tokenId = parseInt(req.params.tokenId, 10);
+    if (isNaN(tokenId)) return res.status(400).json({ success: false, error: 'Invalid token ID' });
+    
+    const identity = await db.getSolanaIdentityByTokenId(tokenId);
+    if (!identity) return res.status(404).json({ success: false, error: 'No Solana identity found for this token' });
+    
+    const solscanLink = identity.scan_url || `https://solscan.io/token/${identity.identity_nft_mint}`;
+    const magicEdenLink = identity.identity_nft_mint ? `https://magiceden.io/item-details/${identity.identity_nft_mint}` : null;
+    
+    res.json({
+      success: true,
+      identity: {
+        ...identity,
+        solscan_url: solscanLink,
+        magic_eden_url: magicEdenLink
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching Solana identity:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/sol-identities/:tokenId/mint', async (req, res) => {
+  try {
+    const tokenId = parseInt(req.params.tokenId, 10);
+    if (isNaN(tokenId)) return res.status(400).json({ success: false, error: 'Invalid token ID' });
+    
+    const collectionMint = process.env.SOLANA_IDENTITY_COLLECTION_MINT;
+    if (!collectionMint) return res.status(503).json({ success: false, error: 'Solana identity collection not configured yet' });
+    
+    const existing = await db.getSolanaIdentityByTokenId(tokenId);
+    if (existing) return res.status(409).json({ success: false, error: 'Identity already minted for this token', identity: existing });
+    
+    const token = await db.getToken(tokenId);
+    if (!token) return res.status(404).json({ success: false, error: 'Token not found' });
+    
+    const venue = token.venue || 'pump.fun';
+    if (venue !== 'pump.fun' && venue !== 'bags.fm') {
+      return res.status(400).json({ success: false, error: 'Solana identity only available for pump.fun/bags.fm tokens' });
+    }
+    
+    const agentSkill = await db.getAgentSkillByTokenId(tokenId);
+    if (!agentSkill) return res.status(400).json({ success: false, error: 'No agent skill found. Deploy agent first.' });
+    
+    if (!token.wallet_private_key_encrypted) {
+      return res.status(400).json({ success: false, error: 'No wallet key available for this token' });
+    }
+    
+    const signerKey = decrypt(token.wallet_private_key_encrypted);
+    
+    const identityResult = await solanaIdentity.mintIdentityNFT(
+      signerKey, collectionMint, token, agentSkill,
+      { imageUri: token.image_url || '' }
+    );
+    
+    const identity = await db.createSolanaIdentity({
+      token_id: token.id,
+      agent_skill_id: agentSkill.id,
+      identity_nft_mint: identityResult.identityNftMint,
+      token_mint: token.mint_address,
+      creator_wallet: token.wallet_public_key,
+      deployment_platform: venue,
+      metadata_uri: identityResult.metadataUri,
+      verification_hash: identityResult.verificationHash,
+      collection_mint: collectionMint,
+      status: 'minted',
+      tx_hash: identityResult.txSignature,
+      scan_url: identityResult.solscanUrl
+    });
+    
+    res.json({
+      success: true,
+      identity: {
+        ...identity,
+        solscan_url: identityResult.solscanUrl,
+        magic_eden_url: identityResult.magicEdenUrl
+      }
+    });
+  } catch (error) {
+    console.error('Error minting Solana identity:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Direct AI Chat endpoint (replaces OpenClaw gateway)
 const chatHistories = new Map();
 
@@ -2566,58 +3015,64 @@ app.post('/api/chat', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Message is required' });
     }
 
-    // Get or create chat history for this session
     const chatKey = sessionId || 'default';
     if (!chatHistories.has(chatKey)) {
       chatHistories.set(chatKey, []);
     }
     const history = chatHistories.get(chatKey);
     
-    // Add user message to history
     history.push({ role: 'user', content: message });
     
-    // Keep last 20 messages to avoid token limits
     if (history.length > 20) {
       history.splice(0, history.length - 20);
     }
 
-    // Call Claude API (using Replit AI Integrations)
-    const response = await anthropic.messages.create({
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+
+    let fullMessage = '';
+
+    const stream = await anthropic.messages.stream({
       model: 'claude-sonnet-4-5',
       max_tokens: 4096,
       system: CLAWP_SYSTEM_PROMPT,
       messages: history
     });
 
-    const assistantMessage = response.content[0].text;
-    console.log(`[Chat] AI response length: ${assistantMessage.length} chars`);
-    
-    // Add assistant response to history
-    history.push({ role: 'assistant', content: assistantMessage });
+    for await (const event of stream) {
+      if (event.type === 'content_block_delta' && event.delta?.text) {
+        fullMessage += event.delta.text;
+        res.write(`data: ${JSON.stringify({ type: 'delta', text: event.delta.text })}\n\n`);
+      }
+    }
 
-    // Try to extract blueprint JSON from response
+    console.log(`[Chat] AI response length: ${fullMessage.length} chars`);
+    history.push({ role: 'assistant', content: fullMessage });
+
     let blueprint = null;
-    const jsonMatch = assistantMessage.match(/```json\s*([\s\S]*?)\s*```/);
+    const jsonMatch = fullMessage.match(/```json\s*([\s\S]*?)\s*```/);
     if (jsonMatch) {
-      console.log('[Chat] Found JSON block, attempting parse...');
       try {
         blueprint = JSON.parse(jsonMatch[1]);
         console.log(`[Chat] Blueprint extracted: ${blueprint.name} ($${blueprint.symbol})`);
       } catch (e) {
         console.log('[Chat] JSON parse failed:', e.message);
       }
-    } else {
-      console.log('[Chat] No JSON block found in response');
     }
 
-    res.json({
-      success: true,
-      message: assistantMessage,
-      blueprint: blueprint
-    });
+    res.write(`data: ${JSON.stringify({ type: 'done', message: fullMessage, blueprint })}\n\n`);
+    res.end();
   } catch (error) {
     console.error('Chat error:', error);
-    res.status(500).json({ success: false, error: error.message });
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, error: error.message });
+    } else {
+      res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
+      res.end();
+    }
   }
 });
 
@@ -2730,5 +3185,6 @@ server.listen(PORT, '0.0.0.0', () => {
   startBagsFeeClaimer();
   startPumpfunFeeClaimer();
   startClankerFeeClaimer();
+  startFourMemeFeeClaimer();
   startAutoPostScheduler();
 });
