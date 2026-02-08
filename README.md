@@ -253,6 +253,18 @@ All sensitive data is encrypted at rest.
 
 ---
 
+## Setup and Run Locally
+To run ClawPad locally for testing or development:
+
+1. Clone the repo: `git clone https://github.com/Clawpad/clawp.ad.git`
+2. Install dependencies: `cd clawp.ad && npm install`
+3. Set up environment: Copy `.env.example` to `.env` and fill in your keys (DB connection, AI APIs, RPC URLs).
+4. Set up PostgreSQL: Create a database and run the schema (tables like tokens, sessions, agents – see src/db.mjs for queries).
+5. Start the server: `npm start`
+6. Access the frontend: Open http://localhost:3000/index.html in your browser (serves from public/).
+
+---
+
 ## Links
 
 - Website: https://clawp.ad
