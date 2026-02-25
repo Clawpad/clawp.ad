@@ -2,11 +2,12 @@ import fetch from 'node-fetch';
 import { VersionedTransaction } from '@solana/web3.js';
 import * as solana from './solana.mjs';
 
-const JUPITER_API_BASE = 'https://quote-api.jup.ag/v6';
+const JUPITER_QUOTE_URL = 'https://lite-api.jup.ag/swap/v1/quote';
+const JUPITER_SWAP_URL = 'https://lite-api.jup.ag/swap/v1/swap';
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
 
 export async function getSwapQuote(inputMint, outputMint, amountLamports, slippageBps = 100) {
-  const url = `${JUPITER_API_BASE}/quote?` +
+  const url = `${JUPITER_QUOTE_URL}?` +
     `inputMint=${inputMint}` +
     `&outputMint=${outputMint}` +
     `&amount=${amountLamports}` +
@@ -17,14 +18,14 @@ export async function getSwapQuote(inputMint, outputMint, amountLamports, slippa
   
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`Jupiter quote error: ${error}`);
+    throw new Error(`Jupiter quote error (${response.status}): ${error}`);
   }
 
   return response.json();
 }
 
 export async function getSwapTransaction(quoteResponse, userPublicKey) {
-  const response = await fetch(`${JUPITER_API_BASE}/swap`, {
+  const response = await fetch(JUPITER_SWAP_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -37,7 +38,7 @@ export async function getSwapTransaction(quoteResponse, userPublicKey) {
 
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`Jupiter swap error: ${error}`);
+    throw new Error(`Jupiter swap error (${response.status}): ${error}`);
   }
 
   return response.json();
