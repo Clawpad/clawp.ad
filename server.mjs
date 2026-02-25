@@ -1,3 +1,11 @@
+process.on('uncaughtException', (err) => {
+  console.error('[FATAL] Uncaught exception:', err.message);
+  console.error(err.stack);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[FATAL] Unhandled rejection:', reason);
+});
+
 import express from 'express';
 import { createServer } from 'node:http';
 import path from 'node:path';
@@ -14,6 +22,7 @@ import { startBagsFeeClaimer } from './src/bags-fee-claimer.mjs';
 import { startPumpfunFeeClaimer } from './src/pumpfun-fee-claimer.mjs';
 import { startClankerFeeClaimer } from './src/clanker-fee-claimer.mjs';
 import { startFourMemeFeeClaimer } from './src/fourmeme-fee-claimer.mjs';
+import { startTwitterBot, postTweet, reinitTwitterBot } from './src/twitter-bot.mjs';
 import * as bagsSDK from './src/bags-sdk.mjs';
 import * as clankerSDK from './src/clanker.mjs';
 import * as baseWallet from './src/base-wallet.mjs';
@@ -23,6 +32,13 @@ import fs from 'node:fs';
 import erc8004 from './src/erc8004.mjs';
 import * as solanaIdentity from './src/solana-identity.mjs';
 import { startAutoPostScheduler, testPostForAgent, triggerFirstPost } from './src/moltbook-autoposter.mjs';
+import { launchAndSnip, checkWalletStatus } from './src/dev-snip.mjs';
+import { launchAndSnipBase } from './src/dev-snip-base.mjs';
+import { initSolanaAgent, setTweetFunction as setAgentTweetFn } from './src/solana-agent/index.mjs';
+import { buyToken, logTransaction } from './src/solana-agent/trader.mjs';
+import { getOrCreateAgentWallet } from './src/solana-agent/wallet.mjs';
+import { getTokenPrice } from './src/solana-agent/dexscreener.mjs';
+import { addPosition } from './src/solana-agent/position-monitor.mjs';
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -55,11 +71,18 @@ function isValidUUID(str) {
   return !isNaN(num) && num > 0 && String(num) === str;
 }
 
+const PLATFORM_FUND_AMOUNT = 0.025;
+
 function getRequiredDeposit(venue) {
   if (venue === 'bags.fm') return 0.06;
   if (venue === 'clanker') return 0.001;
   if (venue === 'four.meme') return 0.005;
-  return 0.035;
+  if (venue === 'pump.fun') return 0;
+  return 0;
+}
+
+function isPlatformFunded(venue) {
+  return venue === 'pump.fun' || !venue;
 }
 
 function getChainForVenue(venue) {
@@ -188,6 +211,64 @@ Output ONLY the JSON, no markdown or explanation.`;
       ],
       introPost: `gm Moltbook! ${token.name} agent reporting for duty. Here to bring vibes, insights, and ${token.symbol} energy to the timeline.`
     };
+  }
+}
+
+async function autoRegisterMoltbookAgent(agentSkill, token, blueprint) {
+  try {
+    const tokenName = (token.name || token.symbol || 'Unknown').trim();
+    const agentName = `${tokenName} Agent Clawp`.substring(0, 32);
+    const agentDescription = agentSkill.voice || `${agentSkill.archetype} archetype AI agent for ${tokenName}`;
+
+    console.log(`[Moltbook] Auto-registering agent "${agentName}" for token ${token.symbol}...`);
+
+    const registerRes = await fetch('https://www.moltbook.com/api/v1/agents/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: agentName, description: agentDescription })
+    });
+
+    const registerData = await registerRes.json();
+
+    if (!registerRes.ok || !registerData.agent) {
+      console.error('[Moltbook] Auto-registration failed:', registerData);
+      return null;
+    }
+
+    const { api_key, claim_url, verification_code } = registerData.agent;
+    const moltbookAgentName = registerData.agent.name || agentName;
+
+    console.log(`[Moltbook] Registered! Agent: ${moltbookAgentName}, Claim URL: ${claim_url}`);
+
+    const encryptedApiKey = api_key ? encrypt(api_key) : null;
+    await db.updateAgentSkillPendingClaim(agentSkill.id, encryptedApiKey, moltbookAgentName, claim_url, verification_code);
+
+    if (api_key && token.image_url) {
+      try {
+        console.log(`[Moltbook] Setting avatar for ${moltbookAgentName}...`);
+        const avatarRes = await fetch('https://www.moltbook.com/api/v1/agents/me', {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${api_key}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ avatar_url: token.image_url })
+        });
+        if (avatarRes.ok) {
+          console.log(`[Moltbook] Avatar set for ${moltbookAgentName}`);
+        } else {
+          console.warn(`[Moltbook] Avatar update returned ${avatarRes.status}`);
+        }
+      } catch (avatarErr) {
+        console.warn('[Moltbook] Avatar upload failed (non-critical):', avatarErr.message);
+      }
+    }
+
+    console.log(`[Moltbook] Auto-registration complete for ${moltbookAgentName}. Agent will auto-post until user claims.`);
+    return { agentName: moltbookAgentName, claimUrl: claim_url, verificationCode: verification_code };
+  } catch (error) {
+    console.error('[Moltbook] Auto-registration error (non-critical):', error.message);
+    return null;
   }
 }
 
@@ -413,17 +494,30 @@ app.post('/api/generate-logos', async (req, res) => {
     }
     
     const logoStyles = styles || [
-      { style: 'Minimal', description: 'Clean minimalist design with simple shapes' },
-      { style: 'Mascot', description: 'Cute mascot character design' },
-      { style: 'Abstract', description: 'Bold abstract geometric design' }
+      { style: '3D Render', description: 'High quality 3D rendered character or object, soft studio lighting, glossy or matte finish, Pixar-like quality' },
+      { style: 'Cinematic', description: 'Dramatic cinematic lighting, epic composition, metallic and glossy surfaces, volumetric light effects' },
+      { style: 'Neon Glow', description: 'Vibrant neon rim lighting, synthwave color accents, glowing edges, energetic and dynamic feel' }
     ];
     
+    const tokenTheme = blueprint.description || blueprint.narrative || 'modern crypto token';
+    
     const generateLogoPrompt = (style) => {
-      const basePrompt = `Create a cryptocurrency token logo for "${blueprint.name}" (${blueprint.symbol}). 
-Theme: ${blueprint.description || blueprint.narrative || 'modern crypto token'}.
-Style: ${style.description}.
-Requirements: Square format, centered design, simple and iconic, suitable for small sizes, no text or letters, solid background color.`;
-      return basePrompt;
+      return `Create an NFT-style collectible token logo for a cryptocurrency called "${blueprint.name}" (${blueprint.symbol}).
+
+Token theme: ${tokenTheme}
+
+Visual style: ${style.description}
+
+Strict requirements:
+- The subject/character must match the token theme above, not a generic icon
+- Dark background (black or very dark gradient)
+- Centered composition, single main subject
+- 3D rendered look with depth, shadows, and highlights
+- Vibrant saturated colors with high contrast against the dark background
+- Professional quality, sharp and crisp details
+- Square 1:1 format
+- Absolutely NO text, NO letters, NO words, NO symbols, NO watermarks
+- Suitable as a profile picture or token icon at small sizes`;
     };
     
     const logoPromises = logoStyles.map(async (style, index) => {
@@ -651,6 +745,7 @@ app.post('/api/session/:id/deploy', async (req, res) => {
           const skillData = await generateAgentSkill(token, blueprint);
           agentSkill = await db.createAgentSkill(token.id, skillData);
           console.log(`[Deploy/Clanker] Agent personality created: ${agentSkill.archetype}`);
+          autoRegisterMoltbookAgent(agentSkill, token, blueprint).catch(err => console.error('[Deploy/Clanker] Moltbook auto-register failed:', err.message));
         } catch (agentError) {
           console.error('[Deploy/Clanker] Agent skill generation failed (non-critical):', agentError.message);
         }
@@ -822,6 +917,7 @@ app.post('/api/session/:id/deploy', async (req, res) => {
           const skillData = await generateAgentSkill(token, blueprint);
           agentSkill = await db.createAgentSkill(token.id, skillData);
           console.log(`[Deploy/FourMeme] Agent personality created: ${agentSkill.archetype}`);
+          autoRegisterMoltbookAgent(agentSkill, token, blueprint).catch(err => console.error('[Deploy/FourMeme] Moltbook auto-register failed:', err.message));
         } catch (agentError) {
           console.error('[Deploy/FourMeme] Agent skill generation failed (non-critical):', agentError.message);
         }
@@ -901,19 +997,6 @@ app.post('/api/session/:id/deploy', async (req, res) => {
       }
     }
     
-    const balance = await solana.getBalance(session.deposit_address);
-    const requiredDeposit = getRequiredDeposit(venue);
-    if (balance < requiredDeposit) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Insufficient deposit',
-        balance,
-        required: requiredDeposit
-      });
-    }
-    
-    await db.updateSessionStatus(session.id, 'deploying');
-    
     if (!session.wallet_private_key_encrypted) {
       return res.status(400).json({ success: false, error: 'Session wallet not found' });
     }
@@ -921,12 +1004,42 @@ app.post('/api/session/:id/deploy', async (req, res) => {
     const signerSecretKey = decrypt(session.wallet_private_key_encrypted);
     const signerKeypair = solana.keypairFromSecretKey(signerSecretKey);
     
-    const MAX_CLAW_RETRIES = 10;
-    let clawRetryCount = 0;
+    if (isPlatformFunded(venue)) {
+      const treasuryKey = process.env.COLLECTION_SIGNER_KEY;
+      if (!treasuryKey) {
+        return res.status(500).json({ success: false, error: 'Platform treasury not configured' });
+      }
+      const treasuryKeypair = solana.keypairFromSecretKey(treasuryKey);
+      const treasuryBalance = await solana.getBalance(treasuryKeypair.publicKey.toBase58());
+      if (treasuryBalance < PLATFORM_FUND_AMOUNT + 0.002) {
+        console.error(`[Deploy] Platform treasury low: ${treasuryBalance} SOL`);
+        return res.status(503).json({ success: false, error: 'Platform treasury balance too low. Please try again later.' });
+      }
+      console.log(`[Deploy] Auto-funding session wallet ${session.deposit_address} with ${PLATFORM_FUND_AMOUNT} SOL from platform treasury...`);
+      const fundTx = await solana.transferSOL(treasuryKeypair, session.deposit_address, PLATFORM_FUND_AMOUNT);
+      console.log(`[Deploy] Funded session wallet: ${fundTx}`);
+      await db.updateSessionDeposit(session.id, PLATFORM_FUND_AMOUNT, treasuryKeypair.publicKey.toBase58());
+    } else {
+      const balance = await solana.getBalance(session.deposit_address);
+      const requiredDeposit = getRequiredDeposit(venue);
+      if (balance < requiredDeposit) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Insufficient deposit',
+          balance,
+          required: requiredDeposit
+        });
+      }
+    }
+    
+    await db.updateSessionStatus(session.id, 'deploying');
+    
+    const MAX_VANITY_RETRIES = 10;
+    let vanityRetryCount = 0;
     let lastError = null;
     
-    while (clawRetryCount < MAX_CLAW_RETRIES) {
-      console.log(`[Deploy] Reserving pre-generated CLAW mint address from pool (attempt ${clawRetryCount + 1})...`);
+    while (vanityRetryCount < MAX_VANITY_RETRIES) {
+      console.log(`[Deploy] Reserving pre-generated vanity mint address from pool (attempt ${vanityRetryCount + 1})...`);
       const reservedAddress = await db.reserveVanityAddress(session.id);
       
       if (!reservedAddress) {
@@ -934,7 +1047,7 @@ app.post('/api/session/:id/deploy', async (req, res) => {
         vanityPool.triggerGeneration();
         return res.status(503).json({ 
           success: false, 
-          error: 'No CLAW addresses available. Please try again in a few minutes.',
+          error: 'No vanity addresses available. Please try again in a few minutes.',
           retryAfter: 60
         });
       }
@@ -1069,6 +1182,7 @@ app.post('/api/session/:id/deploy', async (req, res) => {
         const skillData = await generateAgentSkill(token, blueprint);
         agentSkill = await db.createAgentSkill(token.id, skillData);
         console.log(`[Deploy] Agent personality created: ${agentSkill.archetype}`);
+        autoRegisterMoltbookAgent(agentSkill, token, blueprint).catch(err => console.error('[Deploy] Moltbook auto-register failed:', err.message));
       } catch (agentError) {
         console.error('[Deploy] Agent skill generation failed (non-critical):', agentError.message);
       }
@@ -1154,9 +1268,9 @@ app.post('/api/session/:id/deploy', async (req, res) => {
             if (isAlreadyInUse) {
               await db.markVanityAddressBurned(reservedAddress.id);
               console.log(`[Deploy] Marked vanity address ${reservedAddress.public_key} as BURNED (already in use on blockchain)`);
-              clawRetryCount++;
+              vanityRetryCount++;
               lastError = deployError;
-              console.log(`[Deploy] Retrying with different CLAW address...`);
+              console.log(`[Deploy] Retrying with different vanity address...`);
               continue;
             } else {
               await db.releaseVanityAddress(reservedAddress.id);
@@ -1172,7 +1286,7 @@ app.post('/api/session/:id/deploy', async (req, res) => {
     }
     
     if (lastError) {
-      console.error(`[Deploy] Failed after ${MAX_CLAW_RETRIES} CLAW address attempts`);
+      console.error(`[Deploy] Failed after ${MAX_VANITY_RETRIES} vanity address attempts`);
       throw lastError;
     }
     
@@ -1354,6 +1468,127 @@ app.post('/api/admin/prepare-launch', async (req, res) => {
     
   } catch (error) {
     console.error('[Admin] Error preparing launch:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/admin/wallet-status', async (req, res) => {
+  try {
+    const { adminPassword, sniperAmounts } = req.body;
+    if (adminPassword !== ADMIN_PASSWORD) {
+      return res.status(403).json({ success: false, error: 'Invalid admin password' });
+    }
+    const status = await checkWalletStatus(sniperAmounts);
+    res.json({ success: true, ...status });
+  } catch (error) {
+    console.error('[Admin] Wallet status error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/admin/wallet-update', async (req, res) => {
+  try {
+    const { adminPassword, devPk, snipPk1, snipPk2, snipPk3, snipPk4 } = req.body;
+    if (adminPassword !== ADMIN_PASSWORD) {
+      return res.status(403).json({ success: false, error: 'Invalid admin password' });
+    }
+
+    const updates = [];
+    const keys = [
+      { key: 'DEV_PK', value: devPk },
+      { key: 'SNIP_PK1', value: snipPk1 },
+      { key: 'SNIP_PK2', value: snipPk2 },
+      { key: 'SNIP_PK3', value: snipPk3 },
+      { key: 'SNIP_PK4', value: snipPk4 }
+    ];
+
+    for (const { key, value } of keys) {
+      if (value && value.trim()) {
+        try {
+          const bs58Module = await import('bs58');
+          const decoded = bs58Module.default.decode(value.trim());
+          if (decoded.length !== 64) throw new Error('Invalid length');
+          process.env[key] = value.trim();
+          updates.push({ key, status: 'updated' });
+        } catch (e) {
+          updates.push({ key, status: 'error', error: 'Invalid base58 private key format' });
+        }
+      }
+    }
+
+    console.log(`[Admin] Wallet update: ${updates.filter(u => u.status === 'updated').length} keys updated`);
+    res.json({ success: true, updates });
+  } catch (error) {
+    console.error('[Admin] Wallet update error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/admin/launch-snip', async (req, res) => {
+  try {
+    const { name, symbol, description, logo, website, twitter, adminPassword, sniperAmounts } = req.body;
+
+    if (adminPassword !== ADMIN_PASSWORD) {
+      return res.status(403).json({ success: false, error: 'Invalid admin password' });
+    }
+
+    if (!name || !symbol || !description) {
+      return res.status(400).json({ success: false, error: 'Name, symbol, and description are required' });
+    }
+
+    if (!logo) {
+      return res.status(400).json({ success: false, error: 'Logo is required' });
+    }
+
+    console.log(`[DevSnip] Admin launch-snip requested: ${name} ($${symbol})`);
+
+    const result = await launchAndSnip({
+      name: sanitizeText(name, 50),
+      symbol: sanitizeText(symbol, 10).toUpperCase(),
+      description: sanitizeText(description, 500),
+      logoBase64: logo,
+      website: website || '',
+      twitter: twitter || '',
+      sniperAmounts: sniperAmounts || null
+    });
+
+    res.json(result);
+  } catch (error) {
+    console.error('[DevSnip] Route error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/admin/launch-snip-base', async (req, res) => {
+  try {
+    const { name, symbol, description, imageUrl, website, twitter, adminPassword, checkOnly } = req.body;
+
+    if (adminPassword !== ADMIN_PASSWORD) {
+      return res.status(403).json({ success: false, error: 'Invalid admin password' });
+    }
+
+    if (checkOnly) {
+      return res.json({ success: true, message: 'Authenticated' });
+    }
+
+    if (!name || !symbol || !description) {
+      return res.status(400).json({ success: false, error: 'Name, symbol, and description are required' });
+    }
+
+    console.log(`[DevSnipBase] Admin launch-snip-base requested: ${name} ($${symbol})`);
+
+    const result = await launchAndSnipBase({
+      name: sanitizeText(name, 50),
+      symbol: sanitizeText(symbol, 10).toUpperCase(),
+      description: sanitizeText(description, 500),
+      imageUrl: imageUrl || '',
+      website: website || '',
+      twitter: twitter || ''
+    });
+
+    res.json(result);
+  } catch (error) {
+    console.error('[DevSnipBase] Route error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -1604,6 +1839,38 @@ app.get('/api/stats', async (req, res) => {
   }
 });
 
+app.get('/api/platform-posts', async (req, res) => {
+  try {
+    const result = await db.query(
+      `SELECT id, content, post_type, status, platform, created_at 
+       FROM twitter_posts 
+       WHERE platform = 'moltbook' AND status = 'posted'
+       ORDER BY created_at DESC 
+       LIMIT 30`
+    );
+    res.json({ success: true, posts: result.rows });
+  } catch (error) {
+    console.error('Error fetching platform posts:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/bot-tweets', async (req, res) => {
+  try {
+    const result = await db.query(
+      `SELECT id, tweet_id, content, post_type, status, created_at 
+       FROM twitter_posts 
+       WHERE post_type = 'auto' AND status = 'posted'
+       ORDER BY created_at DESC 
+       LIMIT 30`
+    );
+    res.json({ success: true, tweets: result.rows });
+  } catch (error) {
+    console.error('Error fetching bot tweets:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
@@ -1632,15 +1899,27 @@ app.get('/secret', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'secret.html'));
 });
 
+app.get('/secret/base', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'secret', 'base.html'));
+});
+
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
+});
+
+app.get('/terms', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'terms.html'));
+});
+
+app.get('/privacy', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'privacy.html'));
 });
 
 app.get('/:slug', async (req, res) => {
   try {
     const slug = req.params.slug.toLowerCase();
     
-    if (slug.includes('.') || slug.length > 50 || ['app', 'secret', 'api', 'health', 'favicon.ico', 'openclaw.html'].includes(slug)) {
+    if (slug.includes('.') || slug.length > 50 || ['app', 'secret', 'api', 'health', 'terms', 'privacy', 'favicon.ico', 'openclaw.html'].includes(slug)) {
       return res.status(404).send('Token not found');
     }
     
@@ -1732,6 +2011,7 @@ app.get('/:slug', async (req, res) => {
           const claimUrl = agentSkill.moltbook_claim_url || '#';
           const verCode = agentSkill.moltbook_verification_code || '';
           const agentNameForTweet = agentSkill.moltbook_username || token.name;
+          const moltbookProfileUrl = agentSkill.moltbook_username ? `https://www.moltbook.com/u/${encodeURIComponent(agentSkill.moltbook_username.replace(/\s+/g, '-').toLowerCase())}` : '#';
           
           agentSection = `
             <section class="agent-section" style="margin: 40px 0; padding: 28px; background: var(--bg-secondary); border-radius: 20px; border: 1px solid var(--border-color);">
@@ -1739,43 +2019,50 @@ app.get('/:slug', async (req, res) => {
                 <h3 style="display: flex; align-items: center; gap: 10px; font-family: 'Space Grotesk', sans-serif; font-size: 1.3rem;">
                   <span style="font-size: 1.5rem;">🤖</span> Moltbook AI Agent
                 </h3>
-                <span style="background: rgba(255, 170, 0, 0.2); color: #ffaa00; padding: 4px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 600;">PENDING CLAIM</span>
+                <span style="background: rgba(0, 255, 136, 0.2); color: #00ff88; padding: 4px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 600;">LIVE &amp; AUTO-POSTING</span>
+              </div>
+
+              <div style="display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap;">
+                <div style="flex: 0 0 80px;">
+                  <div style="width: 80px; height: 80px; background: linear-gradient(135deg, var(--theme-primary), var(--theme-accent)); border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 2.5rem;">
+                    ${emoji}
+                  </div>
+                </div>
+                <div style="flex: 1; min-width: 200px;">
+                  <div style="margin-bottom: 8px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                    <span style="background: linear-gradient(135deg, var(--theme-primary), var(--theme-accent)); padding: 4px 14px; border-radius: 12px; font-size: 0.85rem; font-weight: 600;">
+                      ${escapeHtml(agentSkill.archetype)}
+                    </span>
+                    <span style="color: var(--text-secondary); font-size: 0.85rem;">${escapeHtml(agentNameForTweet)}</span>
+                  </div>
+                  <p style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.6; margin-bottom: 12px;">
+                    ${escapeHtml((agentSkill.voice || '').substring(0, 150))}${(agentSkill.voice || '').length > 150 ? '...' : ''}
+                  </p>
+                  <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    ${topicsHtml}
+                  </div>
+                </div>
               </div>
 
               <div style="background: rgba(0, 255, 136, 0.08); border: 1px solid rgba(0, 255, 136, 0.2); border-radius: 12px; padding: 16px; margin-bottom: 20px;">
-                <p style="color: var(--success); font-weight: 600; margin-bottom: 8px;">Agent registered on Moltbook!</p>
-                <p style="color: var(--text-secondary); font-size: 0.85rem;">Complete the steps below to finish claiming your agent.</p>
-              </div>
-
-              <div style="margin-bottom: 20px;">
-                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-                  <span style="background: var(--success); color: #0a0a0f; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem;">1</span>
-                  <span style="font-weight: 600;">Tweet this verification:</span>
-                </div>
-                <div style="background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 10px; padding: 14px; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; color: var(--text-primary); line-height: 1.5;">
-                  I'm claiming my AI agent "${escapeHtml(agentNameForTweet)}" on @moltbook<br>Verification: ${escapeHtml(verCode)}
-                </div>
-              </div>
-
-              <div style="margin-bottom: 20px;">
-                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-                  <span style="background: var(--success); color: #0a0a0f; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem;">2</span>
-                  <span style="font-weight: 600;">Complete claim on Moltbook:</span>
-                </div>
+                <p style="color: var(--success); font-weight: 600; margin-bottom: 8px;">This agent is live on Moltbook and posting automatically.</p>
+                <p style="color: var(--text-secondary); font-size: 0.85rem;">Want to take control? Claim your agent on Moltbook to manage its posts and settings yourself.</p>
               </div>
 
               <div style="display: flex; gap: 12px; flex-wrap: wrap;">
                 <a href="${escapeHtml(claimUrl)}" target="_blank" style="display: inline-flex; align-items: center; gap: 8px; padding: 14px 28px; background: linear-gradient(135deg, var(--success), #00cc6a); color: #0a0a0f; border: none; border-radius: 12px; text-decoration: none; font-weight: 700; font-size: 1rem;">
-                  Open Moltbook Claim Page
+                  Claim This Agent
                 </a>
-                <button onclick="checkClaimStatus(${agentSkill.id})" id="checkClaimBtn" style="display: inline-flex; align-items: center; gap: 8px; padding: 14px 20px; background: transparent; color: var(--text-secondary); border: 1px solid var(--border-color); border-radius: 12px; cursor: pointer; font-size: 0.9rem;">
-                  I've completed claim ✓
-                </button>
+                <a href="${escapeHtml(moltbookProfileUrl)}" target="_blank" style="display: inline-flex; align-items: center; gap: 8px; padding: 14px 20px; background: transparent; color: var(--text-secondary); border: 1px solid var(--border-color); border-radius: 12px; text-decoration: none; font-size: 0.9rem;">
+                  View on Moltbook
+                </a>
+                <a href="/api/agents/${agentSkill.id}/export-personality" download style="display: inline-flex; align-items: center; gap: 8px; padding: 14px 20px; background: transparent; color: var(--text-secondary); border: 1px solid var(--border-color); border-radius: 12px; text-decoration: none; font-size: 0.9rem;">
+                  Download Personality
+                </a>
               </div>
             </section>
           `;
         } else if (agentSkill.status === 'unclaimed') {
-          // UNCLAIMED STATE - Show claim CTA
           const topicsHtml = topicsArray.slice(0, 3).map(t => 
             `<span style="background: rgba(255,255,255,0.1); padding: 4px 12px; border-radius: 12px; font-size: 0.8rem;">${escapeHtml(t)}</span>`
           ).join('');
@@ -1786,7 +2073,7 @@ app.get('/:slug', async (req, res) => {
                 <h3 style="display: flex; align-items: center; gap: 10px; font-family: 'Space Grotesk', sans-serif; font-size: 1.3rem;">
                   <span style="font-size: 1.5rem;">🤖</span> Moltbook AI Agent
                 </h3>
-                <span style="background: rgba(255, 170, 0, 0.2); color: #ffaa00; padding: 4px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 600;">UNCLAIMED</span>
+                <span style="background: rgba(255, 170, 0, 0.2); color: #ffaa00; padding: 4px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 600;">NOT YET REGISTERED</span>
               </div>
               
               <div style="display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap;">
@@ -1812,16 +2099,16 @@ app.get('/:slug', async (req, res) => {
               
               <div style="background: var(--bg-primary); border-radius: 12px; padding: 20px; margin-bottom: 20px;">
                 <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 12px;">
-                  🦞 This token has an AI agent ready to join <strong style="color: var(--success);">Moltbook</strong> - the social network for AI agents with 1.5M+ bots!
+                  This token has an AI agent personality ready. It was created before auto-registration was available.
                 </p>
                 <p style="color: var(--text-secondary); font-size: 0.85rem;">
-                  Click below to register your agent on Moltbook. We'll set everything up — you just verify with a tweet.
+                  Click below to register it on Moltbook now. The agent will start auto-posting once registered.
                 </p>
               </div>
               
               <div style="display: flex; gap: 12px; flex-wrap: wrap;">
                 <button onclick="openClaimModal(${agentSkill.id})" style="display: inline-flex; align-items: center; gap: 8px; padding: 14px 28px; background: linear-gradient(135deg, var(--success), #00cc6a); color: #0a0a0f; border: none; border-radius: 12px; cursor: pointer; font-weight: 700; font-size: 1rem; transition: all 0.3s;">
-                  🦞 Claim Your Agent
+                  Register Agent on Moltbook
                 </button>
                 <a href="/api/agents/${agentSkill.id}/export-personality" download style="display: inline-flex; align-items: center; gap: 8px; padding: 14px 20px; background: transparent; color: var(--text-secondary); border: 1px solid var(--border-color); border-radius: 12px; text-decoration: none; font-size: 0.9rem; cursor: pointer;">
                   Download Personality File
@@ -3166,6 +3453,212 @@ async function handleMigration(message) {
   }
 }
 
+app.post('/api/twitter-bot/generate-tweet', async (req, res) => {
+  try {
+    const authHeader = req.headers['x-bot-key'];
+    const expectedKey = process.env.TWITTER_API_SECRET;
+    if (!authHeader || authHeader !== expectedKey) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const recentPosts = await db.query(
+      `SELECT content FROM twitter_posts WHERE post_type = 'auto' ORDER BY created_at DESC LIMIT 10`
+    );
+    const recentContent = recentPosts.rows.map(r => r.content).join('\n---\n');
+
+    const recentTokens = await db.query(
+      `SELECT name, symbol, venue FROM tokens WHERE status = 'active' ORDER BY created_at DESC LIMIT 5`
+    );
+    const tokenContext = recentTokens.rows.length > 0
+      ? `Recent launches on ClawPad: ${recentTokens.rows.map(t => `${t.name} ($${t.symbol}) on ${t.venue}`).join(', ')}`
+      : 'ClawPad is the autonomous multi-chain token launcher.';
+
+    const postTypes = [
+      'a bold crypto/AI hot take that shows deep insider knowledge',
+      'a witty shitpost about memecoins, AI agents, or the crypto market',
+      'a cryptic prophecy about the future of AI agents and on-chain identity',
+      'an observation about the crypto market from a crab overlord perspective',
+      'a nerdy comment about the science of launching tokens, like a mad scientist',
+      'a philosophical haiku or zen wisdom about crypto and AI',
+      'a hype post about multi-chain token launching (Solana, Base, BNB)',
+      'a community engagement post that asks a fun question to followers',
+    ];
+    const archetypes = ['Launchpad Oracle', 'Crab Overlord', 'Mad Scientist', 'Degen Whisperer'];
+    const randomType = postTypes[Math.floor(Math.random() * postTypes.length)];
+    const randomArchetype = archetypes[Math.floor(Math.random() * archetypes.length)];
+
+    const prompt = `You are CLAWP_Agent (@clawpbot on Twitter), the AI mascot of ClawPad, an autonomous multi-chain token launcher.
+
+Your personality is a hybrid fusion of 4 archetypes:
+- The Launchpad Oracle (Sage): Wise crypto veteran, uses rocket launch analogies, says "from the launchpad"
+- The Crab Overlord (Rebel): Bold trash-talker, "CLAW goes up" catchphrase, 🦀 energy
+- The Mad Scientist (Engineer): Nerdy and chaotic, talks to own code, "the experiment" references
+- The Degen Whisperer (Mystic): Cryptic predictions, "the claws have spoken", haiku wisdom
+
+Right now, channel the "${randomArchetype}" energy.
+
+${tokenContext}
+
+Your task: Write ${randomType}.
+
+Rules:
+- Max 260 characters (leave room for Twitter formatting)
+- Be authentic, funny, and engaging. Not promotional or salesy.
+- NEVER mention specific contract addresses or financial advice
+- You can use 1-2 emojis max (🦀 is your signature)
+- Reference ClawPad or multi-chain launching naturally when relevant, not forced
+- Vary your style from recent posts
+- Never use dashes between sentences. Use periods, commas, or restructure.
+
+${recentContent ? `Your recent tweets (DO NOT repeat similar themes or patterns):\n${recentContent}` : ''}
+
+Output ONLY the tweet text. No quotes, no explanation.`;
+
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-5',
+      max_tokens: 256,
+      messages: [{ role: 'user', content: prompt }]
+    });
+
+    const tweetText = response.content[0].text.trim().replace(/^["']|["']$/g, '').slice(0, 280);
+    res.json({ success: true, tweet: tweetText, archetype: randomArchetype, type: randomType });
+  } catch (err) {
+    console.error('[API] Tweet generation error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/twitter-bot/log-tweet', async (req, res) => {
+  try {
+    const authHeader = req.headers['x-bot-key'];
+    const expectedKey = process.env.TWITTER_API_SECRET;
+    if (!authHeader || authHeader !== expectedKey) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const { tweet_id, content } = req.body;
+    if (!content) {
+      return res.status(400).json({ error: 'Missing content' });
+    }
+
+    await db.query(
+      `INSERT INTO twitter_posts (tweet_id, content, post_type, status) VALUES ($1, $2, 'auto', 'posted')`,
+      [tweet_id || `local_${Date.now()}`, content]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[API] Tweet log error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/auth/twitter', (req, res) => {
+  const clientId = process.env.TWITTER_OAUTH2_CLIENT_ID;
+  if (!clientId) {
+    return res.status(500).send('TWITTER_OAUTH2_CLIENT_ID not configured');
+  }
+
+  const redirectUri = `https://${req.get('host')}/callback`;
+  const scopes = 'tweet.read tweet.write users.read offline.access';
+  const state = 'clawpbot_auth_' + Date.now();
+  const codeChallenge = 'challenge123';
+
+  const authUrl = `https://twitter.com/i/oauth2/authorize?response_type=code&client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}&state=${encodeURIComponent(state)}&code_challenge=${codeChallenge}&code_challenge_method=plain`;
+
+  console.log(`[OAuth] Auth URL generated, redirect_uri: ${redirectUri}`);
+  res.redirect(authUrl);
+});
+
+app.get('/callback', async (req, res) => {
+  const { code, state } = req.query;
+  console.log(`[OAuth] Callback received. code=${code ? 'yes' : 'no'}, state=${state || 'none'}, host=${req.get('host')}`);
+  if (!code) {
+    return res.status(400).send('Missing authorization code');
+  }
+
+  try {
+    const clientId = process.env.TWITTER_OAUTH2_CLIENT_ID;
+    const clientSecret = process.env.TWITTER_OAUTH2_CLIENT_SECRET;
+    if (!clientId || !clientSecret) {
+      console.error('[OAuth] Missing TWITTER_OAUTH2_CLIENT_ID or TWITTER_OAUTH2_CLIENT_SECRET');
+      return res.status(500).send('Missing OAuth2 client credentials');
+    }
+    const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+    const redirectUri = `https://${req.get('host')}/callback`;
+    console.log(`[OAuth] Exchanging code for token. redirect_uri=${redirectUri}`);
+
+    const tokenRes = await fetch('https://api.twitter.com/2/oauth2/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Authorization': `Basic ${basicAuth}`
+      },
+      body: new URLSearchParams({
+        code: code,
+        grant_type: 'authorization_code',
+        redirect_uri: redirectUri,
+        code_verifier: 'challenge123'
+      })
+    });
+
+    const tokenData = await tokenRes.json();
+    console.log('[OAuth] Token exchange result:', JSON.stringify(tokenData));
+
+    if (tokenData.access_token) {
+      const meRes = await fetch('https://api.twitter.com/2/users/me', {
+        headers: { 'Authorization': `Bearer ${tokenData.access_token}` }
+      });
+      const meData = await meRes.json();
+      console.log('[OAuth] Authenticated as:', JSON.stringify(meData));
+
+      try {
+        if (tokenData.refresh_token) {
+          await db.query(
+            `INSERT INTO twitter_oauth_tokens (account_name, access_token, refresh_token, updated_at)
+             VALUES ('clawpbot', $1, $2, NOW())
+             ON CONFLICT (account_name) DO UPDATE SET access_token = $1, refresh_token = $2, updated_at = NOW()`,
+            [tokenData.access_token, tokenData.refresh_token]
+          );
+        } else {
+          await db.query(
+            `INSERT INTO twitter_oauth_tokens (account_name, access_token, refresh_token, updated_at)
+             VALUES ('clawpbot', $1, '', NOW())
+             ON CONFLICT (account_name) DO UPDATE SET access_token = $1, updated_at = NOW()`,
+            [tokenData.access_token]
+          );
+        }
+        console.log('[OAuth] Tokens saved to database');
+      } catch (dbErr) {
+        console.error('[OAuth] Failed to save tokens to DB:', dbErr.message);
+      }
+
+      reinitTwitterBot().catch(err => console.error('[OAuth] Bot re-init error:', err.message));
+
+      res.send(`
+        <html><body style="background:#0a0a0f;color:#fff;font-family:monospace;padding:40px;">
+        <h2>OAuth Success!</h2>
+        <p>Authenticated as: @${meData.data?.username || 'unknown'}</p>
+        <p><strong>Expires in:</strong> ${tokenData.expires_in}s</p>
+        <p style="color:#00ff88;">Tokens saved. Bot is re-initializing now and will start tweeting automatically.</p>
+        </body></html>
+      `);
+    } else {
+      console.error('[OAuth] Token exchange failed:', JSON.stringify(tokenData));
+      res.send(`
+        <html><body style="background:#0a0a0f;color:#fff;font-family:monospace;padding:40px;">
+        <h2>Token Exchange Failed</h2>
+        <pre>${JSON.stringify(tokenData, null, 2)}</pre>
+        <p style="margin-top:20px;">Auth codes expire quickly and can only be used once. <a href="/auth/twitter" style="color:#00ff88;">Click here to try again.</a></p>
+        </body></html>
+      `);
+    }
+  } catch (err) {
+    console.error('[OAuth] Error:', err.message);
+    res.status(500).send(`Error: ${err.message}`);
+  }
+});
+
 // Validate critical env vars
 const requiredEnvs = ['DATABASE_URL'];
 const missingEnvs = requiredEnvs.filter(e => !process.env[e]);
@@ -3173,6 +3666,80 @@ if (missingEnvs.length > 0) {
   console.error(`FATAL: Missing required env vars: ${missingEnvs.join(', ')}`);
   process.exit(1);
 }
+
+let testSwapUsed = false;
+app.post('/api/test-swap', async (req, res) => {
+  if (testSwapUsed) return res.status(403).json({ error: 'Test swap already used' });
+  
+  const { tokenMint, solAmount = 0.05, secret } = req.body;
+  if (secret !== 'clawp-test-2026') return res.status(401).json({ error: 'Unauthorized' });
+  if (!tokenMint) return res.status(400).json({ error: 'tokenMint required' });
+
+  testSwapUsed = true;
+  
+  try {
+    console.log(`[TestSwap] Starting test swap: ${solAmount} SOL -> ${tokenMint}`);
+    const wallet = await getOrCreateAgentWallet();
+    const tokenInfo = await getTokenPrice(tokenMint);
+    const symbol = tokenInfo?.symbol || 'UNKNOWN';
+    const priceUsd = tokenInfo?.priceUsd || 0;
+
+    const result = await buyToken(wallet.secretKey, tokenMint, solAmount);
+    console.log(`[TestSwap] Buy success! TX: ${result.signature}`);
+
+    const { tp, sl } = await addPosition(tokenMint, symbol, solAmount, priceUsd);
+    await logTransaction('buy', tokenMint, symbol, solAmount, result.signature, 'success', 'test_manual');
+
+    const tweetText = `aped into $${symbol} at $${priceUsd}, tp +${tp}%. 🦞\n\nhttps://solscan.io/tx/${result.signature}`;
+    
+    let tweetResult = null;
+    try {
+      tweetResult = await postTweet(tweetText);
+      console.log(`[TestSwap] Tweet posted: ${tweetResult?.id}`);
+    } catch (tweetErr) {
+      console.error(`[TestSwap] Tweet failed: ${tweetErr.message}`);
+    }
+
+    res.json({ success: true, token: symbol, priceUsd, solSpent: solAmount, tp, sl, txSignature: result.signature, tweetId: tweetResult?.id || null, tweetText });
+  } catch (err) {
+    console.error(`[TestSwap] Error: ${err.message}`);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/bot-knowledge', async (req, res) => {
+  try {
+    await db.query(`CREATE TABLE IF NOT EXISTS bot_knowledge (id SERIAL PRIMARY KEY, category VARCHAR(50) NOT NULL, content TEXT NOT NULL, active BOOLEAN DEFAULT true, created_at TIMESTAMP DEFAULT NOW())`);
+    const result = await db.query(`SELECT * FROM bot_knowledge ORDER BY created_at DESC`);
+    res.json({ success: true, entries: result.rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/bot-knowledge', async (req, res) => {
+  const { category, content, secret } = req.body;
+  if (secret !== 'clawp-test-2026') return res.status(401).json({ error: 'Unauthorized' });
+  if (!category || !content) return res.status(400).json({ error: 'category and content required' });
+  try {
+    await db.query(`CREATE TABLE IF NOT EXISTS bot_knowledge (id SERIAL PRIMARY KEY, category VARCHAR(50) NOT NULL, content TEXT NOT NULL, active BOOLEAN DEFAULT true, created_at TIMESTAMP DEFAULT NOW())`);
+    const result = await db.query(`INSERT INTO bot_knowledge (category, content) VALUES ($1, $2) RETURNING *`, [category, content]);
+    res.json({ success: true, entry: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/bot-knowledge/:id', async (req, res) => {
+  const { secret } = req.body || {};
+  if (secret !== 'clawp-test-2026') return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    await db.query(`UPDATE bot_knowledge SET active = false WHERE id = $1`, [req.params.id]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`CLAWP Agent running on http://0.0.0.0:${PORT}`);
@@ -3186,5 +3753,8 @@ server.listen(PORT, '0.0.0.0', () => {
   startPumpfunFeeClaimer();
   startClankerFeeClaimer();
   startFourMemeFeeClaimer();
+  startTwitterBot().catch(err => console.error('[TwitterBot] Startup error:', err.message));
+  setAgentTweetFn(postTweet);
+  initSolanaAgent().catch(err => console.error('[SolAgent] Startup error:', err.message));
   startAutoPostScheduler();
 });
